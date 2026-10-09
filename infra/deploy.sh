@@ -25,7 +25,19 @@ if [ -z "$SESSION_SECRET_VALUE" ]; then
   printf '%s' "$SESSION_SECRET_VALUE" > "$SECRETS/session-secret.txt"
 fi
 
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+# dashboard (SQLAdmin) credentials: generated once, kept in infra/secrets/dashboard.env
+if [ ! -s "$SECRETS/dashboard.env" ]; then
+  ( umask 077
+    printf 'ADMIN_DB_USER=admin\nADMIN_DB_PASSWORD=%s\n' "$(openssl rand -base64 30 | tr -dc 'A-Za-z0-9' | head -c 20)" > "$SECRETS/dashboard.env" )
+fi
+ADMIN_DB_USER="$(sed -n 's/^ADMIN_DB_USER=//p' "$SECRETS/dashboard.env" | tr -d '\015')"
+ADMIN_DB_PASSWORD="$(sed -n 's/^ADMIN_DB_PASSWORD=//p' "$SECRETS/dashboard.env" | tr -d '\015')"
+: "${ADMIN_DB_USER:?}" "${ADMIN_DB_PASSWORD:?}"
+
+umask 077
+TMP="$(mktemp -d)"
+cleanup() { rm -rf "$TMP"; ssh "${SSH_OPTS[@]}" "$REMOTE" 'rm -f /tmp/backend.tgz /tmp/horse-admin.env /tmp/horse-admin-api.service' >/dev/null 2>&1 || true; }
+trap cleanup EXIT
 echo "==> packaging backend"
 tar -C "$ROOT/backend" --exclude='.venv' --exclude='venv' --exclude='__pycache__' \
   --exclude='.pytest_cache' --exclude='tests' --exclude='.env' --exclude='.env.*' \
@@ -38,10 +50,11 @@ API_ACCESS_KEY=$API_ACCESS_KEY
 AWS_REGION=$REGION
 S3_BUCKET=$BUCKET
 CORS_ORIGINS=$CORS_ORIGINS
-ADMIN_DB_USER=${ADMIN_DB_USER:-admin}
-ADMIN_DB_PASSWORD=${ADMIN_DB_PASSWORD:-123456789}
+ADMIN_DB_USER=$ADMIN_DB_USER
+ADMIN_DB_PASSWORD=$ADMIN_DB_PASSWORD
 SESSION_SECRET=$SESSION_SECRET_VALUE
 ENVEOF
+chmod 600 "$TMP/horse-admin.env"
 
 echo "==> uploading to $EIP"
 scp "${SSH_OPTS[@]}" "$TMP/backend.tgz" "$TMP/horse-admin.env" "$INFRA/horse-admin-api.service" "$REMOTE:/tmp/"
@@ -69,7 +82,7 @@ sudo install -m 600 -o root -g root /tmp/horse-admin.env /etc/horse-admin.env
 sudo install -m 644 /tmp/horse-admin-api.service /etc/systemd/system/horse-admin-api.service
 rm -f /tmp/backend.tgz /tmp/horse-admin.env /tmp/horse-admin-api.service
 # alembic reads env via pydantic settings (needs DATABASE_URL etc.)
-sudo bash -c 'set -a; . /etc/horse-admin.env; set +a; cd /opt/horse-admin/backend && sudo -u ec2-user -E env "PATH=$PATH" .venv/bin/alembic upgrade head'
+sudo systemd-run --quiet --pipe --wait --collect -p User=ec2-user -p EnvironmentFile=/etc/horse-admin.env -p WorkingDirectory=/opt/horse-admin/backend /opt/horse-admin/backend/.venv/bin/alembic upgrade head
 sudo systemctl daemon-reload
 sudo systemctl enable horse-admin-api
 sudo systemctl restart horse-admin-api
