@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -64,3 +65,31 @@ async def client(engine) -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 def api_headers() -> dict[str, str]:
     return {"X-API-Key": settings.API_ACCESS_KEY}
+
+
+@pytest_asyncio.fixture
+async def clean_db(engine):
+    """Empty all tables before a test (the RDS test DB is shared across tests)."""
+    async with engine.begin() as conn:
+        await conn.execute(text("TRUNCATE photo_metadata, photos, horses RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture
+def s3():
+    """moto-mocked S3 with the photo bucket created."""
+    import boto3
+    from moto import mock_aws
+
+    from src.services import storage
+
+    for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        os.environ[k] = "testing"
+    with mock_aws():
+        storage.reset_client()
+        client = boto3.client("s3", region_name=settings.AWS_REGION)
+        client.create_bucket(
+            Bucket=settings.S3_BUCKET,
+            CreateBucketConfiguration={"LocationConstraint": settings.AWS_REGION},
+        )
+        yield client
+        storage.reset_client()
