@@ -1,0 +1,13 @@
+{
+  "region": "ap-northeast-2",
+  "bucket": "horse-admin-photos-896860228345",
+  "ec2SecurityGroupId": "sg-0f29a011687168fb4",
+  "rdsSecurityGroupId": "sg-0f5448e0c9cbaa0c2",
+  "rdsIdentifier": "horse-admin-db",
+  "rdsEndpoint": "horse-admin-db.cr0mswk0ucll.ap-northeast-2.rds.amazonaws.com",
+  "instanceId": "i-0013eb0703719d968",
+  "elasticIp": "54.117.1.58",
+  "elasticIpAllocationId": "eipalloc-06966bf0d1bf20962",
+  "apiId": "rtt4o67y3m",
+  "apiUrl": "https://rtt4o67y3m.execute-api.ap-northeast-2.amazonaws.com"
+}
