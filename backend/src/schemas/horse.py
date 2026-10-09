@@ -5,7 +5,7 @@ from pydantic import ConfigDict, Field
 from src.models.enums import ChipInputMethod
 from src.schemas.common import CamelModel
 
-MICROCHIP = r"^\d{15}$"
+MICROCHIP = r"^[0-9]{15}$"
 
 
 class HorseBase(CamelModel):

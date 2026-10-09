@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.schemas.common import ListResponse
@@ -6,6 +6,10 @@ from src.schemas.photo_metadata import PhotoMetadataRead
 from src.services import photo_metadata as svc
 from src.services.crud_base import list_rows
 from src.utils.deps import get_db
+
+R400 = {400: {"description": "Invalid filter/order"}}
+R404 = {404: {"description": "Not found"}}
+R409 = {409: {"description": "Duplicate microchip number"}}
 
 router = APIRouter(prefix="/photo-metadata", tags=["photo-metadata"])
 
@@ -16,7 +20,7 @@ FILTER_DOC = (
 )
 
 
-@router.get("", response_model=ListResponse[PhotoMetadataRead], summary="List photo metadata", description=FILTER_DOC)
+@router.get("", response_model=ListResponse[PhotoMetadataRead], responses=R400, summary="List photo metadata", description=FILTER_DOC)
 async def list_metadata(
     request: Request,
     page: int = Query(1, ge=1, description="Page (1-based)"),
@@ -28,6 +32,6 @@ async def list_metadata(
     return {"data": [PhotoMetadataRead.from_orm_row(r) for r in rows], "count": count, "page": page, "limit": limit}
 
 
-@router.get("/{metadata_id}", response_model=PhotoMetadataRead, summary="Get photo metadata")
-async def get_metadata(metadata_id: int, session: AsyncSession = Depends(get_db)):
+@router.get("/{metadata_id}", responses=R404, response_model=PhotoMetadataRead, summary="Get photo metadata")
+async def get_metadata(metadata_id: int = Path(gt=0, le=2147483647, description="ID"), session: AsyncSession = Depends(get_db)):
     return PhotoMetadataRead.from_orm_row(await svc.get_metadata(session, metadata_id))

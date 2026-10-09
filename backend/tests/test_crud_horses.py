@@ -105,3 +105,36 @@ async def test_delete_removes_photos_and_s3(client, api_headers, db_session, s3)
     assert (await client.get("/api/v1/photos", headers=api_headers)).json()["count"] == 0
     assert "Contents" not in s3.list_objects_v2(Bucket=settings.S3_BUCKET)
     assert (await client.delete(f"{URL}/{h['id']}", headers=api_headers)).status_code == 404
+
+
+async def test_unicode_digit_microchip_422(client, api_headers):
+    r = await client.post(URL, json={"microchipNo": "\u0661" * 15}, headers=api_headers)
+    assert r.status_code == 422
+
+
+async def test_repeated_filter_keys_range(client, api_headers):
+    for i in range(4):
+        await mk(client, api_headers, f"41000000000020{i}", horseNo=f"R{i}")
+    r = await client.get(URL, params=[("horseNo", "gte.R1"), ("horseNo", "lte.R2")], headers=api_headers)
+    assert r.json()["count"] == 2
+
+
+async def test_bad_input_is_400_not_500(client, api_headers):
+    await mk(client, api_headers, "410000000000001")
+    for params in (
+        {"id": "eq.99999999999"},
+        {"id": "ilike.%1%"},
+        {"chipInputMethod": "like.%o%"},
+        {"horseNo": "is.true"},
+        {"horseNo": "eq.a\x00b"},
+        {"createdAt": "eq.garbage"},
+    ):
+        r = await client.get(URL, params=params, headers=api_headers)
+        assert r.status_code == 400, (params, r.text)
+    assert (await client.get(f"{URL}/99999999999", headers=api_headers)).status_code == 422
+    assert (await client.get(f"{URL}/0", headers=api_headers)).status_code == 422
+    assert (await client.delete(f"{URL}/99999999999", headers=api_headers)).status_code == 422
+    r = await client.get("/api/v1/photos", params={"horseId": "eq.99999999999"}, headers=api_headers)
+    assert r.status_code == 400
+    r = await client.get("/api/v1/photos", params={"fileSize": "eq.99999999999"}, headers=api_headers)
+    assert r.status_code == 200

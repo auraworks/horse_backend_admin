@@ -30,6 +30,12 @@ def _dup() -> HTTPException:
     return HTTPException(status_code=409, detail="Microchip number already exists")
 
 
+def _is_unique_violation(e: IntegrityError) -> bool:
+    orig = e.orig
+    state = getattr(orig, "sqlstate", None) or getattr(getattr(orig, "__cause__", None), "sqlstate", None)
+    return state == "23505"
+
+
 async def get_horse(session: AsyncSession, horse_id: int) -> Horse:
     return await get_or_404(session, Horse, horse_id, "Horse")
 
@@ -39,9 +45,11 @@ async def create_horse(session: AsyncSession, body: HorseCreate) -> Horse:
     session.add(horse)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await session.rollback()
-        raise _dup()
+        if _is_unique_violation(e):
+            raise _dup()
+        raise
     await session.refresh(horse)
     return horse
 
@@ -54,9 +62,11 @@ async def update_horse(session: AsyncSession, horse_id: int, body: HorseUpdate) 
         setattr(horse, k, v)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await session.rollback()
-        raise _dup()
+        if _is_unique_violation(e):
+            raise _dup()
+        raise
     await session.refresh(horse)
     return horse
 
