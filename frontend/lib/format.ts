@@ -42,3 +42,21 @@ export const dash = (v: unknown): string =>
   v === null || v === undefined || v === "" ? "-" : String(v);
 
 export const EXT: Record<string, string> = { jpeg: "jpg", png: "png" };
+
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** KST calendar date (y, m0, d; overflow allowed) -> UTC ISO of its 00:00 KST. */
+export function kstMidnightIso(y: number, m0: number, d: number): string {
+  return new Date(Date.UTC(y, m0, d) - KST_OFFSET_MS).toISOString();
+}
+
+/** Today's date in KST as { y, m0, d }. */
+export function kstToday(): { y: number; m0: number; d: number } {
+  const now = new Date(Date.now() + KST_OFFSET_MS);
+  return { y: now.getUTCFullYear(), m0: now.getUTCMonth(), d: now.getUTCDate() };
+}
+
+export const CHIP_METHOD_LABEL: Record<string, string> = {
+  ocr: "OCR 인식",
+  manual: "직접 입력",
+};

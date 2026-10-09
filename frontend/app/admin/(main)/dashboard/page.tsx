@@ -1,136 +1,203 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import {
-  api,
-  apiFetch,
-  type ListResponse,
-  type Stats,
-  type PhotoDetail,
-} from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/Table";
+import { dash, formatDate } from "@/lib/format";
+import DailyPhotoChart from "./components/DailyPhotoChart";
+import HorseTrendChart from "./components/HorseTrendChart";
+import { loadDashboard, type DashboardData } from "./data";
 
-interface PhotoRow {
-  id: number;
-  horseId: number;
-}
+const fmt = (n: number | undefined) => (n === undefined ? "-" : n.toLocaleString());
 
-interface Thumb {
-  id: number;
-  horseId: number;
-  url: string;
-  label: string;
-}
-
-interface DashboardData {
-  stats: Stats;
-  recent: Thumb[];
-}
-
-async function loadDashboard(): Promise<DashboardData> {
-  const [stats, recentRes] = await Promise.all([
-    api.getStats(),
-    apiFetch<ListResponse<PhotoRow>>(
-      "photos?page=1&limit=10&order=createdAt.desc"
-    ),
-  ]);
-
-  // Thumbnails need the presigned viewUrl, which PhotoDetail (per horse) has.
-  const horseIds = [...new Set(recentRes.data.map((p) => p.horseId))];
-  const detailMap = new Map<number, PhotoDetail>();
-  await Promise.all(
-    horseIds.map(async (hid) => {
-      const list = await api.listHorsePhotos(hid);
-      list.forEach((p) => detailMap.set(p.id, p));
-    })
+function StatCard({
+  title,
+  rows,
+  action,
+}: {
+  title: string;
+  rows: [string, string][];
+  action?: { label: string; onClick: () => void };
+}) {
+  return (
+    <Card className="flex flex-1 flex-col items-start gap-5 bg-white border border-[#E5E5E5] p-6">
+      <h3 className="self-stretch text-lg font-bold leading-6 text-primary">{title}</h3>
+      <div className="flex flex-col gap-3.5 self-stretch">
+        <div className="flex flex-col gap-1 self-stretch">
+          {rows.map(([label, value], i) => (
+            <div key={label} className="flex items-center justify-between">
+              <span className="text-sm leading-4 text-[#2A2A2A] opacity-70">{label}</span>
+              <span
+                className={`text-xl leading-6 tracking-[-0.4px] ${
+                  i === 0 ? "text-[#2A2A2A]" : "text-[#6D6D6D]"
+                }`}
+              >
+                {value}
+              </span>
+            </div>
+          ))}
+        </div>
+        {action && (
+          <Button
+            onClick={action.onClick}
+            className="h-auto w-full rounded px-3 py-2.5 text-sm font-bold tracking-[-0.28px]"
+          >
+            {action.label}
+          </Button>
+        )}
+      </div>
+    </Card>
   );
-  const recent: Thumb[] = [];
-  for (const p of recentRes.data) {
-    const d = detailMap.get(p.id);
-    if (d)
-      recent.push({
-        id: d.id,
-        horseId: d.horseId,
-        url: d.viewUrl,
-        label: d.partLabel,
-      });
-  }
-  return { stats, recent };
 }
+
+const TH = "text-center text-[#0A0A0A] text-xs font-medium leading-5";
+const TD = "text-center text-[#0A0A0A] text-xs font-medium leading-5";
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardData | null>(null);
+  const router = useRouter();
+  const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const refreshedOnce = useRef(false);
 
   useEffect(() => {
     loadDashboard()
-      .then(setStats)
-      .catch((e) =>
-        setError(e instanceof Error ? e.message : "불러오지 못했습니다.")
-      );
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : "불러오지 못했습니다."));
   }, []);
 
-  // A thumbnail failed (expired presigned URL): reload the dashboard once.
-  const onImageError = () => {
-    if (refreshedOnce.current) return;
-    refreshedOnce.current = true;
-    loadDashboard().then(setStats).catch(() => {});
-  };
-
-  const cards: [string, number | undefined][] = [
-    ["등록 말 수", stats?.stats.horseCount],
-    ["총 사진 수", stats?.stats.photoCount],
-    ["6부위 촬영 완료 말 수", stats?.stats.horsesWithAllSixParts],
-  ];
+  const goHorses = { label: "말 촬영 관리", onClick: () => router.push("/admin/horses") };
+  const incomplete =
+    data === null ? undefined : Math.max(0, data.horseCount - data.completeHorses);
+  const maxPart = Math.max(1, ...(data?.partCounts.map((p) => p.count) ?? [0]));
 
   return (
-    <div className="px-12 py-14">
-      <h1 className="text-2xl font-semibold text-[#2A2A2A] leading-8">
-        대시보드
-      </h1>
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+    <div className="flex w-full flex-col gap-11 p-12">
+      <h1 className="text-2xl font-bold leading-8 text-[#2A2A2A]">대시보드</h1>
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        {cards.map(([title, value]) => (
-          <Card key={title} className="border border-gray-200 py-6 gap-3">
-            <CardHeader>
-              <CardTitle className="text-sm text-gray-500">{title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-semibold">{value ?? "-"}</div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* 요약 카드 */}
+      <div className="flex flex-col md:flex-row gap-8 self-stretch">
+        <StatCard
+          title="말 등록 현황"
+          rows={[
+            ["오늘 신규", `${fmt(data?.newHorsesToday)}마리`],
+            ["전체", `${fmt(data?.horseCount)}마리`],
+          ]}
+          action={goHorses}
+        />
+        <StatCard
+          title="사진 촬영 현황"
+          rows={[
+            ["오늘 업로드", `${fmt(data?.newPhotosToday)}장`],
+            ["전체", `${fmt(data?.photoCount)}장`],
+          ]}
+          action={goHorses}
+        />
+        <StatCard
+          title="6부위 촬영 완료"
+          rows={[
+            ["완료", `${fmt(data?.completeHorses)}마리`],
+            ["미완료", `${fmt(incomplete)}마리`],
+          ]}
+          action={goHorses}
+        />
       </div>
 
-      <h2 className="mt-10 text-lg font-semibold text-[#2A2A2A]">
-        최근 업로드 사진
-      </h2>
-      {stats && stats.recent.length === 0 && (
-        <p className="mt-3 text-sm text-gray-500">업로드된 사진이 없습니다.</p>
-      )}
-      <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3">
-        {stats?.recent.map((t) => (
-          <Link
-            key={t.id}
-            href={`/admin/horses/${t.horseId}`}
-            className="block border border-gray-200 rounded-md overflow-hidden hover:shadow"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={t.url}
-              alt={t.label}
-              onError={onImageError}
-              className="w-full h-32 object-cover"
-            />
-            <div className="px-2 py-1 text-xs text-gray-600">
-              말 #{t.horseId} · {t.label}
+      {/* 차트 */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 self-stretch">
+        <Card className="flex flex-col gap-6 bg-white border border-[#E5E5E5] p-6">
+          <h3 className="text-xl font-bold leading-6 text-black">최근 7일 사진 업로드</h3>
+          {data && <DailyPhotoChart points={data.dailyPhotos} />}
+        </Card>
+        <Card className="flex flex-col gap-6 bg-white border border-[#E5E5E5] p-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold leading-6 text-black">말 등록 추세</h3>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold text-[#6D6D6D]">전체</span>
+              <span className="text-xl font-bold text-black">{fmt(data?.horseCount)}마리</span>
             </div>
-          </Link>
-        ))}
+          </div>
+          {data && <HorseTrendChart points={data.monthlyHorses} />}
+        </Card>
+      </div>
+
+      {/* 부위별 사진 수 + 최근 등록 말 */}
+      <div className="flex flex-col xl:flex-row gap-8 self-stretch">
+        <Card className="flex xl:w-[328px] shrink-0 flex-col gap-2 bg-white border border-[#E5E5E5] p-6">
+          <h3 className="text-xl font-bold leading-6 text-black">부위별 사진 수</h3>
+          <div className="flex items-center justify-between py-2 text-sm font-bold text-[#6D6D6D]">
+            <span>부위</span>
+            <span>사진 수</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {data?.partCounts.map(({ part, count }) => (
+              <div key={part.code} className="flex flex-col gap-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#555]">{part.label}</span>
+                  <span className="font-bold text-primary">{count.toLocaleString()}</span>
+                </div>
+                <div className="h-1.5 w-full rounded bg-primary/10">
+                  <div
+                    className="h-1.5 rounded bg-primary"
+                    style={{ width: `${(count / maxPart) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card className="flex flex-1 min-w-0 flex-col gap-6 bg-white border border-[#E5E5E5] p-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-semibold text-[#2A2A2A] leading-8">최근 등록된 말</h3>
+            <Button onClick={goHorses.onClick} className="h-10">
+              <span className="text-sm font-semibold tracking-[-0.28px]">전체 보기</span>
+            </Button>
+          </div>
+          <div className="border border-[#E5E5E5] rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-stone-50 border-b border-[#E5E5E5]">
+                  <TableHead className={TH}>마이크로칩번호</TableHead>
+                  <TableHead className={TH}>마번</TableHead>
+                  <TableHead className={TH}>마명</TableHead>
+                  <TableHead className={TH}>성별</TableHead>
+                  <TableHead className={TH}>등록일</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data && data.recentHorses.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className={`${TD} py-8`}>
+                      등록된 말이 없습니다
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data?.recentHorses.map((h) => (
+                    <TableRow
+                      key={h.id}
+                      onClick={() => router.push(`/admin/horses/${h.id}`)}
+                      className="border-b border-[#E5E5E5] hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <TableCell className={`${TD} font-mono`}>{h.microchipNo}</TableCell>
+                      <TableCell className={TD}>{dash(h.horseNo)}</TableCell>
+                      <TableCell className={TD}>{dash(h.horseName)}</TableCell>
+                      <TableCell className={TD}>{dash(h.sex)}</TableCell>
+                      <TableCell className={TD}>{formatDate(h.createdAt)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
       </div>
     </div>
   );
