@@ -4,7 +4,7 @@ import { ToastProvider } from "@/components/ui/Toast/ToastProvider";
 
 export const metadata: Metadata = {
   title: "관리자 페이지",
-  description: "Inscript 관리자 페이지",
+  description: "말 촬영 사진 관리자 페이지",
 };
 
 export default function RootLayout({

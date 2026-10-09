@@ -16,11 +16,18 @@ export function backendBaseUrl(): string {
 /** Server-side fetch to the backend with the API key injected. */
 export function backendFetch(pathAndQuery: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  headers.set("X-API-Key", process.env.API_ACCESS_KEY ?? "");
+  const apiKey = process.env.API_ACCESS_KEY;
+  if (!apiKey) {
+    return Promise.resolve(
+      Response.json({ detail: "API_ACCESS_KEY is not configured" }, { status: 500 })
+    );
+  }
+  headers.set("X-API-Key", apiKey);
   return fetch(`${backendBaseUrl()}/api/v1/${pathAndQuery}`, {
     ...init,
     headers,
     cache: "no-store",
+    redirect: "manual",
   });
 }
 

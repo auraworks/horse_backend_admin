@@ -12,6 +12,9 @@ async function handle(request: NextRequest, { params }: Ctx) {
   if (!(await hasValidSession())) return unauthorized();
 
   const { path } = await params;
+  if (path.some((s) => s === "." || s === ".." || s.includes("/") || s.includes("\\"))) {
+    return Response.json({ detail: "Invalid path" }, { status: 400 });
+  }
   const target = path.map(encodeURIComponent).join("/") + request.nextUrl.search;
 
   const headers = new Headers();
