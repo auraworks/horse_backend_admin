@@ -3,13 +3,21 @@ from functools import lru_cache
 from urllib.parse import quote
 
 import boto3
+from botocore.config import Config
 
 from src.config import settings
 
 
 @lru_cache
 def _client():
-    return boto3.client("s3", region_name=settings.AWS_REGION)
+    # Regional endpoint so presigned URLs point at s3.<region>.amazonaws.com
+    # (the global endpoint answers 307 for fresh buckets).
+    return boto3.client(
+        "s3",
+        region_name=settings.AWS_REGION,
+        endpoint_url=f"https://s3.{settings.AWS_REGION}.amazonaws.com",
+        config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
+    )
 
 
 def reset_client() -> None:
