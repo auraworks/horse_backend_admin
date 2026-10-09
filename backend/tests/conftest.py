@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 from dotenv import dotenv_values
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -22,7 +23,13 @@ TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or dotenv_values(
 @pytest_asyncio.fixture(scope="session")
 async def engine():
     assert TEST_DATABASE_URL, "TEST_DATABASE_URL is not set"
-    assert TEST_DATABASE_URL != settings.DATABASE_URL, "test DB must differ from app DB"
+    test_url, app_url = make_url(TEST_DATABASE_URL), make_url(settings.DATABASE_URL)
+    assert test_url.database and test_url.database.endswith("_test"), "test DB name must end with _test"
+    assert (test_url.host, test_url.port, test_url.database) != (
+        app_url.host,
+        app_url.port,
+        app_url.database,
+    ), "test DB must differ from app DB"
     eng = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
