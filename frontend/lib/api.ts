@@ -106,16 +106,36 @@ export class ApiError extends Error {
 
 const BASE = "/api/backend";
 
+/** Turns a FastAPI error body (string or Pydantic array `detail`) into one message. */
+function errorDetail(body: unknown, fallback: string): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => {
+        const msg = (d as { msg?: unknown } | null)?.msg;
+        return typeof msg === "string" ? msg : null;
+      })
+      .filter((m): m is string => m !== null);
+    if (msgs.length > 0) return msgs.join(", ");
+  }
+  return fallback;
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
   const res = await fetch(`${BASE}/${path.replace(/^\/+/, "")}`, init);
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      // Session expired (the Next proxy rejected us): back to the login page.
+      if (!window.location.pathname.startsWith("/admin/login")) {
+        window.location.href = "/admin/login";
+      }
+    }
     const body = await res.json().catch(() => null);
-    const detail =
-      typeof body?.detail === "string" ? body.detail : res.statusText;
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, errorDetail(body, res.statusText));
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

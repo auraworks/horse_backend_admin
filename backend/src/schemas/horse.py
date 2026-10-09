@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import ConfigDict, Field
+from pydantic import AliasChoices, ConfigDict, Field
 
 from src.models.enums import ChipInputMethod
 from src.schemas.common import CamelModel
@@ -20,13 +20,24 @@ class HorseBase(CamelModel):
 
 
 class HorseCreate(HorseBase):
-    microchip_no: str = Field(pattern=MICROCHIP, description="Microchip number, exactly 15 digits", examples=["410123456789012"])
+    microchip_no: str = Field(
+        pattern=MICROCHIP,
+        validation_alias=AliasChoices("microchipNo", "microchip_no", "microchipNumber"),
+        serialization_alias="microchipNo",
+        description="Microchip number, exactly 15 digits. Also accepted as `microchipNumber` (the key used by the mobile app / xlsx schema).",
+        examples=["410123456789012"],
+    )
 
 
 class HorseUpdate(HorseBase):
     model_config = ConfigDict(extra="forbid")
     microchip_no: str | None = Field(
-        default=None, pattern=MICROCHIP, description="Microchip number, exactly 15 digits", examples=["410123456789012"]
+        default=None,
+        pattern=MICROCHIP,
+        validation_alias=AliasChoices("microchipNo", "microchip_no", "microchipNumber"),
+        serialization_alias="microchipNo",
+        description="Microchip number, exactly 15 digits. Also accepted as `microchipNumber` (the key used by the mobile app / xlsx schema).",
+        examples=["410123456789012"],
     )
 
 

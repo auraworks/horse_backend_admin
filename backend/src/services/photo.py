@@ -2,6 +2,8 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from src.models import Photo
 from src.schemas.photo import PhotoUpdate
 from src.services import storage
@@ -42,7 +44,22 @@ async def update_photo(session: AsyncSession, photo_id: int, body: PhotoUpdate) 
 async def delete_photo(session: AsyncSession, photo_id: int) -> None:
     photo = await get_photo(session, photo_id)
     key = photo.s3_key
+    was_selected = photo.is_selected
+    horse_id, part_code = photo.horse_id, photo.part_code
     await session.delete(photo)
+    await session.flush()
+    if was_selected:
+        # promote the newest remaining photo of the same horse+slot as representative
+        nxt = (
+            await session.execute(
+                select(Photo)
+                .where(Photo.horse_id == horse_id, Photo.part_code == part_code)
+                .order_by(Photo.created_at.desc(), Photo.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if nxt is not None:
+            nxt.is_selected = True
     await session.commit()
     try:
         await storage.delete_objects([key])

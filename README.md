@@ -99,14 +99,15 @@ npm run dev                   # http://localhost:3000/admin
 | `CORS_ORIGINS` | `http://localhost:3000` | 쉼표 구분 허용 Origin |
 | `ADMIN_DB_USER` / `ADMIN_DB_PASSWORD` | `admin` / 개발용 기본값 | DB 대시보드 계정. 배포 시 랜덤 비밀번호로 덮어씀 |
 | `SESSION_SECRET` | API_ACCESS_KEY에서 파생 | 대시보드 세션 서명 |
+| `SESSION_HTTPS_ONLY` | `false` | 대시보드 세션 쿠키 Secure 플래그 (HTTPS 서비스 시 `true`, deploy.sh가 설정) |
 
 ### frontend (`frontend/.env.local`)
 | 이름 | 설명 |
 |---|---|
 | `BACKEND_API_URL` | 백엔드 주소 (API Gateway URL 또는 `http://localhost:8000`) |
 | `API_ACCESS_KEY` | 백엔드의 `API_ACCESS_KEY`와 동일 (서버 전용) |
-| `ADMIN_ID` / `ADMIN_PASSWORD` | 관리자 로그인 (기본 `admin` / `123456789`) |
-| `SESSION_SECRET` | `admin_session` 쿠키 서명용 랜덤 문자열 |
+| `ADMIN_ID` / `ADMIN_PASSWORD` | 관리자 로그인 (기본 `admin` / `123456789`, **공개 배포 전 반드시 변경**) |
+| `SESSION_SECRET` | `admin_session` 쿠키 서명용 랜덤 문자열 (**공개 배포 전 반드시 설정**) |
 
 ## 6. 배포 / 삭제
 
@@ -287,6 +288,8 @@ SQLAdmin을 백엔드에 내장했습니다: `https://rtt4o67y3m.execute-api.ap-
 - 주소 `http://localhost:3000/admin`, **ID `admin` / PW `123456789`** (환경변수 `ADMIN_ID`, `ADMIN_PASSWORD`로 변경). **운영 사용 전 반드시 변경하세요.**
 - 기능: 대시보드(통계), 말 목록/상세, 부위별 사진 보기(뷰어), 촬영 메타데이터 확인, 사진 다운로드.
 - 이 비밀번호는 Next 관리자 웹용이며, DB 대시보드(12장)와 별개입니다.
+- **경고 (공개 배포 시 필수)**: 기본 계정 `admin` / `123456789`는 스펙상 기본값일 뿐입니다. Amplify 등 공개 호스팅에 배포하기 전에 호스팅 환경변수에 `ADMIN_PASSWORD`(및 필요 시 `ADMIN_ID`)와 `SESSION_SECRET`(긴 랜덤 문자열)을 **반드시** 설정하세요. 설정하지 않으면 누구나 기본 비밀번호로 로그인할 수 있습니다.
+- 로그인 시도 제한: IP(`x-forwarded-for`)당 10분에 5회 실패하면 429로 잠깁니다 (서버 인스턴스 메모리 기준의 단순 제한이므로 강한 비밀번호를 대체하지 않습니다).
 
 ## 14. 알려진 제한 사항
 
@@ -298,3 +301,4 @@ SQLAdmin을 백엔드에 내장했습니다: `https://rtt4o67y3m.execute-api.ap-
 - 서비스가 `ec2-user` 권한으로 실행됩니다.
 - 서버 `CORS_ORIGINS`는 현재 `http://localhost:3000`입니다. 프론트 주소가 바뀌면 `CORS_ORIGINS=... bash infra/deploy.sh`로 재배포하세요 (Next 서버 프록시를 쓰면 브라우저 CORS와 무관).
 - 로그인/사용자 계정 체계는 없고 고정 API 키 하나로 인증합니다.
+- **Next 관리자 웹의 기본 비밀번호(`admin`/`123456789`)와 `SESSION_SECRET`은 공개 사용 전에 반드시 Amplify/호스팅 환경변수로 교체해야 합니다** (13장 참고). 로그인 제한은 인스턴스 메모리 기반의 단순 구현입니다.

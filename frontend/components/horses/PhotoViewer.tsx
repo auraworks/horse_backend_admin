@@ -13,6 +13,7 @@ interface Props {
   index: number | null;
   onIndexChange: (i: number | null) => void;
   onSetRepresentative: (p: PhotoDetail) => Promise<void>;
+  onImageError?: () => void; // e.g. expired presigned URL: caller reloads the list
 }
 
 const ZOOM_MIN = 0.25;
@@ -23,6 +24,7 @@ export function PhotoViewer({
   index,
   onIndexChange,
   onSetRepresentative,
+  onImageError,
 }: Props) {
   const [zoom, setZoom] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -116,6 +118,7 @@ export function PhotoViewer({
               <img
                 src={photo.viewUrl}
                 alt={photo.fileName}
+                onError={onImageError}
                 style={{ width: `${zoom * 100}%`, maxWidth: "none" }}
                 className="block mx-auto"
               />

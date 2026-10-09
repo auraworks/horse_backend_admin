@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   api,
+  ApiError,
   photoFileUrl,
   type Horse,
   type PhotoDetail,
@@ -24,11 +25,14 @@ export default function HorseDetailPage({
   const { id } = use(params);
   const toast = useToast();
   const horseId = Number(id);
+  const validId = /^[1-9][0-9]{0,9}$/.test(id) && Number.isSafeInteger(horseId);
+  const NOT_FOUND = "말을 찾을 수 없습니다";
 
   const [horse, setHorse] = useState<Horse | null>(null);
   const [parts, setParts] = useState<PhotoPart[]>([]);
   const [photos, setPhotos] = useState<PhotoDetail[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(validId ? null : NOT_FOUND);
+  const refreshedOnce = useRef(false);
   const [viewerPhotoId, setViewerPhotoId] = useState<number | null>(null);
   const [zipping, setZipping] = useState(false);
 
@@ -36,7 +40,15 @@ export default function HorseDetailPage({
     setPhotos(await api.listHorsePhotos(horseId));
   }, [horseId]);
 
+  // An <img> failed (expired presigned viewUrl): reload the list once.
+  const onImageError = useCallback(() => {
+    if (refreshedOnce.current) return;
+    refreshedOnce.current = true;
+    reloadPhotos().catch(() => {});
+  }, [reloadPhotos]);
+
   useEffect(() => {
+    if (!validId) return;
     Promise.all([
       api.getHorse(horseId),
       api.listPhotoParts(),
@@ -48,9 +60,15 @@ export default function HorseDetailPage({
         setPhotos(ph);
       })
       .catch((e) =>
-        setError(e instanceof Error ? e.message : "불러오지 못했습니다.")
+        setError(
+          e instanceof ApiError && (e.status === 404 || e.status === 422)
+            ? NOT_FOUND
+            : e instanceof Error
+              ? e.message
+              : "불러오지 못했습니다."
+        )
       );
-  }, [horseId]);
+  }, [horseId, validId]);
 
   // Group per part; representative first, then newest first.
   const grouped = useMemo(() => {
@@ -191,6 +209,7 @@ export default function HorseDetailPage({
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={rep.viewUrl}
+                        onError={onImageError}
                         alt={rep.fileName}
                         className="w-full h-56 object-cover rounded bg-gray-100"
                       />
@@ -210,6 +229,7 @@ export default function HorseDetailPage({
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={p.viewUrl}
+                              onError={onImageError}
                               alt={p.fileName}
                               className="w-16 h-16 object-cover rounded border border-gray-200"
                             />
@@ -234,6 +254,7 @@ export default function HorseDetailPage({
         index={viewerIndex}
         onIndexChange={onViewerIndexChange}
         onSetRepresentative={setRepresentative}
+        onImageError={onImageError}
       />
     </div>
   );

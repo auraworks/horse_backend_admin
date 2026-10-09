@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   api,
@@ -63,6 +63,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const refreshedOnce = useRef(false);
+
   useEffect(() => {
     loadDashboard()
       .then(setStats)
@@ -70,6 +72,13 @@ export default function DashboardPage() {
         setError(e instanceof Error ? e.message : "불러오지 못했습니다.")
       );
   }, []);
+
+  // A thumbnail failed (expired presigned URL): reload the dashboard once.
+  const onImageError = () => {
+    if (refreshedOnce.current) return;
+    refreshedOnce.current = true;
+    loadDashboard().then(setStats).catch(() => {});
+  };
 
   const cards: [string, number | undefined][] = [
     ["등록 말 수", stats?.stats.horseCount],
@@ -111,7 +120,12 @@ export default function DashboardPage() {
             className="block border border-gray-200 rounded-md overflow-hidden hover:shadow"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={t.url} alt={t.label} className="w-full h-32 object-cover" />
+            <img
+              src={t.url}
+              alt={t.label}
+              onError={onImageError}
+              className="w-full h-32 object-cover"
+            />
             <div className="px-2 py-1 text-xs text-gray-600">
               말 #{t.horseId} · {t.label}
             </div>

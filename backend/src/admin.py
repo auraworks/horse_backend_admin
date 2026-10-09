@@ -57,7 +57,7 @@ class PhotoMetadataAdmin(ModelView, model=PhotoMetadata):
 def mount_admin(app: FastAPI, engine: AsyncEngine) -> Admin:
     secret = settings.SESSION_SECRET or hashlib.sha256(("dashboard:" + settings.API_ACCESS_KEY).encode()).hexdigest()
     admin = Admin(
-        app, engine, base_url="/dashboard", title="Horse Admin DB", authentication_backend=DbAuth(secret_key=secret)
+        app, engine, base_url="/dashboard", title="Horse Admin DB", authentication_backend=DbAuth(secret_key=secret, https_only=settings.SESSION_HTTPS_ONLY),
     )
     for view in (HorseAdmin, PhotoAdmin, PhotoMetadataAdmin):
         admin.add_view(view)

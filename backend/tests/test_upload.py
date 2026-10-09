@@ -29,11 +29,12 @@ async def mk_horse(client, h, chip=CHIP):
     return r.json()["id"]
 
 
-async def upload(client, h, horse_id, slot="front_full", m=None, data=b"\xff\xd8abc", ctype="image/jpeg", extra=None):
+async def upload(client, h, horse_id, slot="front_full", m=None, data=b"\xff\xd8abc", ctype="image/jpeg", extra=None,
+                 filename="p.jpg"):
     return await client.post(
         f"/api/v1/horses/{horse_id}/photos/{slot}",
         headers=h,
-        files={"photo": ("p.jpg", data, ctype)},
+        files={"photo": (filename, data, ctype)},
         data={"metadata": json.dumps(m if m is not None else meta()), **(extra or {})},
     )
 
@@ -60,7 +61,7 @@ async def test_upload_body_slot(client, api_headers, s3):
 async def test_upload_png_and_null_gps(client, api_headers):
     hid = await mk_horse(client, api_headers)
     r = await upload(client, api_headers, hid, m=meta(fileFormat="png", gps=None), ctype="image/png")
-    assert r.status_code == 201 and r.json()["metadata"]["gps"] is None and r.json()["fileName"].endswith(".png")
+    assert r.status_code == 201 and r.json()["metadata"]["gps"] is None and r.json()["fileName"] == "p.jpg"
 
 
 async def test_upload_microchip_slot(client, api_headers):
@@ -163,7 +164,7 @@ async def test_download_url(client, api_headers):
     r = await client.get(f"/api/v1/photos/{pid}/download-url", headers=api_headers)
     assert r.status_code == 200
     b = r.json()
-    assert b["expiresIn"] == 3600 and b["fileName"].endswith(".jpg")
+    assert b["expiresIn"] == 3600 and b["fileName"] == "p.jpg"
     assert "attachment" in unquote(b["url"])
     assert (await client.get("/api/v1/photos/999999/download-url", headers=api_headers)).status_code == 404
 
@@ -257,3 +258,46 @@ async def test_content_type_params_and_ascii_filename(client, api_headers):
     d = (await client.get(f"/api/v1/photos/{r.json()['id']}/download-url", headers=api_headers)).json()
     assert 'filename%3D%22' in d["url"] or 'filename="' in unquote(d["url"])
     assert "filename*%3DUTF-8" in d["url"] or "filename*=UTF-8" in unquote(d["url"])
+
+
+async def test_file_name_is_client_filename(client, api_headers, s3):
+    hid = await mk_horse(client, api_headers)
+    r = await upload(client, api_headers, hid, filename="정면_테스트.jpg")
+    assert r.status_code == 201 and r.json()["fileName"] == "정면_테스트.jpg"
+    r = await upload(client, api_headers, hid, filename=r"C:\Users\x/../photo.jpg")
+    assert r.status_code == 201 and r.json()["fileName"] == "photo.jpg"
+    r = await upload(client, api_headers, hid, filename="/")
+    assert r.status_code in (201, 422)
+    if r.status_code == 201:
+        assert r.json()["fileName"].endswith(".jpg") and len(r.json()["fileName"]) == 40
+    keys = [o["Key"] for o in s3.list_objects_v2(Bucket=settings.S3_BUCKET)["Contents"]]
+    assert all("정면" not in k and k.startswith(f"horses/{hid}/front_full/") for k in keys)
+
+
+async def test_delete_representative_promotes_newest(client, api_headers):
+    hid = await mk_horse(client, api_headers)
+    p1 = (await upload(client, api_headers, hid)).json()
+    p2 = (await upload(client, api_headers, hid)).json()
+    p3 = (await upload(client, api_headers, hid)).json()
+    assert p1["isSelected"] and not p2["isSelected"] and not p3["isSelected"]
+    assert (await client.delete(f"/api/v1/photos/{p1['id']}", headers=api_headers)).status_code == 204
+    lst = (await client.get(f"/api/v1/horses/{hid}/photos", headers=api_headers)).json()
+    assert [(p["id"], p["isSelected"]) for p in lst] == [(p3["id"], True), (p2["id"], False)]
+    # deleting a non-representative leaves selection alone
+    assert (await client.delete(f"/api/v1/photos/{p2['id']}", headers=api_headers)).status_code == 204
+    lst = (await client.get(f"/api/v1/horses/{hid}/photos", headers=api_headers)).json()
+    assert [(p["id"], p["isSelected"]) for p in lst] == [(p3["id"], True)]
+
+
+async def test_horse_create_accepts_microchip_number(client, api_headers):
+    r = await client.post("/api/v1/horses", json={"microchipNumber": "410000000000077"}, headers=api_headers)
+    assert r.status_code == 201 and r.json()["microchipNo"] == "410000000000077"
+    r = await client.patch(f"/api/v1/horses/{r.json()['id']}", json={"microchipNumber": "410000000000078"}, headers=api_headers)
+    assert r.status_code == 200 and r.json()["microchipNo"] == "410000000000078"
+
+
+def test_client_file_name_helper():
+    from src.services.horse_photos import _client_file_name as f
+    assert f("a\x00b\x1f.jpg") == "ab.jpg"
+    assert f("..") == "" and f(None) == "" and f("") == "" and f("dir/") == ""
+    assert len(f("x" * 400 + ".jpg")) == 255

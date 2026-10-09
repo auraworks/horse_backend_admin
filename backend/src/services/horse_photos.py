@@ -55,6 +55,17 @@ def to_detail(photo: Photo, meta: PhotoMetadata | None) -> PhotoDetail:
     )
 
 
+def _client_file_name(raw: str | None) -> str:
+    """Sanitized basename of the client-supplied filename (no path parts, no control chars, <=255)."""
+    if not raw:
+        return ""
+    name = raw.replace("\\", "/").split("/")[-1]
+    name = "".join(ch for ch in name if ch.isprintable()).strip()
+    if name in (".", ".."):
+        return ""
+    return name[:255]
+
+
 async def _detail(session: AsyncSession, photo: Photo) -> PhotoDetail:
     meta = (await session.execute(select(PhotoMetadata).where(PhotoMetadata.photo_id == photo.id))).scalar_one_or_none()
     return to_detail(photo, meta)
@@ -118,8 +129,9 @@ async def upload_photo(
     if not data:
         raise _422("Photo file is empty")
 
-    file_name = f"{uuid.uuid4()}.{EXT[meta_in.file_format]}"
-    key = f"horses/{horse_id}/{slot.value}/{file_name}"
+    object_name = f"{uuid.uuid4()}.{EXT[meta_in.file_format]}"
+    file_name = _client_file_name(photo.filename) or object_name
+    key = f"horses/{horse_id}/{slot.value}/{object_name}"
     await storage.upload_bytes(key, data, expected)
 
     committed = False

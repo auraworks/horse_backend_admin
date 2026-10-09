@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # DB dashboard (sqladmin) basic credentials
     ADMIN_DB_USER: str = "admin"
     ADMIN_DB_PASSWORD: str = "123456789"
+    SESSION_HTTPS_ONLY: bool = False  # set True when served over HTTPS (dashboard session cookie Secure flag)
     SESSION_SECRET: str | None = None  # defaults to a key derived from API_ACCESS_KEY
 
     @property
