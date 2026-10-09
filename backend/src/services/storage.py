@@ -1,5 +1,6 @@
 import asyncio
 from functools import lru_cache
+from urllib.parse import quote
 
 import boto3
 
@@ -14,6 +15,37 @@ def _client():
 def reset_client() -> None:
     """Drop the cached boto3 client (used by tests that patch AWS)."""
     _client.cache_clear()
+
+
+def _upload_sync(key: str, data: bytes, content_type: str) -> None:
+    _client().put_object(Bucket=settings.S3_BUCKET, Key=key, Body=data, ContentType=content_type)
+
+
+async def upload_bytes(key: str, data: bytes, content_type: str) -> None:
+    await asyncio.to_thread(_upload_sync, key, data, content_type)
+
+
+def presign_view(key: str) -> str:
+    """Presigned inline GET URL (TTL = PRESIGN_TTL). Computed locally, no network call."""
+    return _client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.S3_BUCKET, "Key": key},
+        ExpiresIn=settings.PRESIGN_TTL,
+    )
+
+
+def presign_download(key: str, file_name: str) -> str:
+    """Presigned GET URL forcing a download with the given file name."""
+    disposition = "attachment; filename*=UTF-8''" + quote(file_name, safe="")
+    return _client().generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": settings.S3_BUCKET,
+            "Key": key,
+            "ResponseContentDisposition": disposition,
+        },
+        ExpiresIn=settings.PRESIGN_TTL,
+    )
 
 
 def _delete_objects_sync(keys: list[str]) -> None:

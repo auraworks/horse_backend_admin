@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.admin import mount_admin
 from src.config import settings
+from src.database import engine
 from src.routers import api_v1
 
 app = FastAPI(
@@ -25,3 +27,4 @@ async def health() -> dict[str, str]:
 
 
 app.include_router(api_v1)
+mount_admin(app, engine)

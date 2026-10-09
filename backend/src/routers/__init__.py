@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from src.routers import horses, photo_metadata, photos
+from src.routers import horse_photos, horses, photo_metadata, photo_parts, photos
 from src.utils.deps import require_api_key
 
 api_v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
@@ -14,3 +14,5 @@ async def ping() -> dict[str, bool]:
 api_v1.include_router(horses.router)
 api_v1.include_router(photos.router)
 api_v1.include_router(photo_metadata.router)
+api_v1.include_router(horse_photos.router)
+api_v1.include_router(photo_parts.router)
