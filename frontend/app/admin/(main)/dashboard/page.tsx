@@ -6,25 +6,14 @@ import {
   api,
   apiFetch,
   type ListResponse,
-  type PartCode,
+  type Stats,
   type PhotoDetail,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
-const BODY_PARTS: PartCode[] = [
-  "front_full",
-  "forehead_close",
-  "left_full",
-  "right_full",
-  "right_rear_oblique",
-  "left_rear_oblique",
-];
-
 interface PhotoRow {
   id: number;
   horseId: number;
-  partCode: PartCode;
-  createdAt: string;
 }
 
 interface Thumb {
@@ -34,46 +23,18 @@ interface Thumb {
   label: string;
 }
 
-interface Stats {
-  horses: number;
-  photos: number;
-  complete: number;
+interface DashboardData {
+  stats: Stats;
   recent: Thumb[];
 }
 
-async function loadAllPhotoRows(): Promise<{ rows: PhotoRow[]; count: number }> {
-  const rows: PhotoRow[] = [];
-  const limit = 100;
-  let count = 0;
-  for (let page = 1; page <= 200; page++) {
-    const res = await apiFetch<ListResponse<PhotoRow>>(
-      `photos?page=${page}&limit=${limit}`
-    );
-    count = res.count;
-    rows.push(...res.data);
-    if (rows.length >= res.count || res.data.length === 0) break;
-  }
-  return { rows, count };
-}
-
-async function loadStats(): Promise<Stats> {
-  const [horses, all, recentRes] = await Promise.all([
-    api.listHorses("page=1&limit=1"),
-    loadAllPhotoRows(),
+async function loadDashboard(): Promise<DashboardData> {
+  const [stats, recentRes] = await Promise.all([
+    api.getStats(),
     apiFetch<ListResponse<PhotoRow>>(
       "photos?page=1&limit=10&order=createdAt.desc"
     ),
   ]);
-
-  const byHorse = new Map<number, Set<PartCode>>();
-  for (const r of all.rows) {
-    if (!byHorse.has(r.horseId)) byHorse.set(r.horseId, new Set());
-    byHorse.get(r.horseId)!.add(r.partCode);
-  }
-  let complete = 0;
-  byHorse.forEach((parts) => {
-    if (BODY_PARTS.every((p) => parts.has(p))) complete++;
-  });
 
   // Thumbnails need the presigned viewUrl, which PhotoDetail (per horse) has.
   const horseIds = [...new Set(recentRes.data.map((p) => p.horseId))];
@@ -95,16 +56,15 @@ async function loadStats(): Promise<Stats> {
         label: d.partLabel,
       });
   }
-
-  return { horses: horses.count, photos: all.count, complete, recent };
+  return { stats, recent };
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadStats()
+    loadDashboard()
       .then(setStats)
       .catch((e) =>
         setError(e instanceof Error ? e.message : "불러오지 못했습니다.")
@@ -112,9 +72,9 @@ export default function DashboardPage() {
   }, []);
 
   const cards: [string, number | undefined][] = [
-    ["등록 말 수", stats?.horses],
-    ["총 사진 수", stats?.photos],
-    ["6부위 촬영 완료 말 수", stats?.complete],
+    ["등록 말 수", stats?.stats.horseCount],
+    ["총 사진 수", stats?.stats.photoCount],
+    ["6부위 촬영 완료 말 수", stats?.stats.horsesWithAllSixParts],
   ];
 
   return (

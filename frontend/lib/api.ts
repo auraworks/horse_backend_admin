@@ -88,6 +88,12 @@ export interface DownloadUrl {
   fileName: string;
 }
 
+export interface Stats {
+  horseCount: number;
+  photoCount: number;
+  horsesWithAllSixParts: number;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -122,6 +128,7 @@ const jsonInit = (method: string, body: unknown): RequestInit => ({
 });
 
 export const api = {
+  getStats: () => apiFetch<Stats>("stats"),
   listPhotoParts: () => apiFetch<PhotoPart[]>("photo-parts"),
   listHorses: (query = "") =>
     apiFetch<ListResponse<Horse>>(`horses${query ? `?${query}` : ""}`),

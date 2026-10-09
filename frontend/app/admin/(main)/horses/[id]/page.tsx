@@ -13,6 +13,7 @@ import { EXT, dash, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useToast } from "@/components/ui/Toast/ToastProvider";
 import { PhotoViewer } from "@/components/horses/PhotoViewer";
 
 export default function HorseDetailPage({
@@ -21,13 +22,14 @@ export default function HorseDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const toast = useToast();
   const horseId = Number(id);
 
   const [horse, setHorse] = useState<Horse | null>(null);
   const [parts, setParts] = useState<PhotoPart[]>([]);
   const [photos, setPhotos] = useState<PhotoDetail[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [viewerPhotoId, setViewerPhotoId] = useState<number | null>(null);
   const [zipping, setZipping] = useState(false);
 
   const reloadPhotos = useCallback(async () => {
@@ -62,15 +64,20 @@ export default function HorseDetailPage({
 
   // Flat order used by the viewer (prev/next across photos).
   const flat = useMemo(() => grouped.flatMap((g) => g.list), [grouped]);
-  const openPhoto = (p: PhotoDetail) =>
-    setViewerIndex(flat.findIndex((x) => x.id === p.id));
+  const openPhoto = (p: PhotoDetail) => setViewerPhotoId(p.id);
+  const foundIndex =
+    viewerPhotoId === null ? -1 : flat.findIndex((x) => x.id === viewerPhotoId);
+  const viewerIndex = foundIndex >= 0 ? foundIndex : null;
+  const onViewerIndexChange = (i: number | null) =>
+    setViewerPhotoId(i === null ? null : (flat[i]?.id ?? null));
 
   const setRepresentative = async (p: PhotoDetail) => {
     try {
       await api.setRepresentative(p.horseId, p.partCode, p.id);
       await reloadPhotos();
+      toast.success("대표 사진으로 지정했습니다.");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "대표 지정에 실패했습니다.");
+      toast.error(e instanceof Error ? e.message : "대표 지정에 실패했습니다.");
     }
   };
 
@@ -98,7 +105,7 @@ export default function HorseDetailPage({
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "ZIP 생성에 실패했습니다.");
+      toast.error(e instanceof Error ? e.message : "ZIP 생성에 실패했습니다.");
     } finally {
       setZipping(false);
     }
@@ -225,7 +232,7 @@ export default function HorseDetailPage({
       <PhotoViewer
         photos={flat}
         index={viewerIndex}
-        onIndexChange={setViewerIndex}
+        onIndexChange={onViewerIndexChange}
         onSetRepresentative={setRepresentative}
       />
     </div>
