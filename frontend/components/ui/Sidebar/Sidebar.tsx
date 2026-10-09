@@ -34,7 +34,7 @@ export function Sidebar() {
     <aside className="w-64 bg-stone-50 h-screen max-h-screen sticky top-0 flex flex-col">
       {/* 헤더 */}
       <div className="p-8 flex justify-center">
-        <Image src="/logo.jpg" alt="Logo" width={200} height={55} />
+        <Image src="/KRA.jfif" alt="한국마사회" width={160} height={78} unoptimized />
       </div>
 
       {/* 메인 네비게이션 */}

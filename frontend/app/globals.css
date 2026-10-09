@@ -14,9 +14,9 @@
   --color-popover: hsl(0 0% 100%);
   --color-popover-foreground: hsl(0 0% 4%);
 
-  --color-primary: hsl(11 100% 28%);
+  --color-primary: hsl(211 79% 29%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-primary-light: hsl(11 100% 97%);
+  --color-primary-light: hsl(211 79% 97%);
 
   --color-secondary: hsl(0 0% 96%);
   --color-secondary-foreground: hsl(0 0% 4%);
@@ -32,7 +32,7 @@
 
   --color-border: hsl(0 0% 90%);
   --color-input: hsl(0 0% 92%);
-  --color-ring: hsl(11 100% 28%);
+  --color-ring: hsl(211 79% 29%);
 }
 
 @layer base {
@@ -48,7 +48,7 @@
     --gray-02: #555;
     --gray-03: #6d6d6d;
     --weight-medium: 500;
-    --primary-light-bg: hsl(11 100% 92%);
+    --primary-light-bg: hsl(211 79% 92%);
   }
 
   body {

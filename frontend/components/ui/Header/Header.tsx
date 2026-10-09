@@ -6,10 +6,10 @@ import Link from "next/link";
 
 export function Header() {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex h-20 items-center justify-between bg-white px-10 shadow-[0_4px_12px_0_rgba(83,46,14,0.12)]">
+    <header className="fixed top-0 left-0 right-0 z-50 flex h-20 items-center justify-between bg-white px-10 shadow-[0_4px_12px_0_rgba(16,72,133,0.12)]">
       <div className="flex items-center gap-1 flex-1">
         <Link href="/admin/login">
-          <Image src="/logo.jpg" alt="Logo" width={150} height={50} />
+          <Image src="/KRA.jfif" alt="한국마사회" width={100} height={49} unoptimized />
         </Link>
       </div>
       <div className="flex items-center gap-2">

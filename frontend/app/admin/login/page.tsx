@@ -10,7 +10,7 @@ export default function LoginPage() {
         <div className="flex justify-center gap-2 md:justify-start">
           <a href="#" className="flex items-center gap-2 font-medium">
             <div className="">
-              <Image src="/logo.jpg" alt="Logo" width={100} height={50} />
+              <Image src="/KRA.jfif" alt="한국마사회" width={120} height={59} unoptimized />
             </div>
             관리자 페이지
           </a>
