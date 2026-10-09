@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --radius-lg: 0.5rem;
+  --radius-md: calc(0.5rem - 2px);
+  --radius-sm: calc(0.5rem - 4px);
+
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(0 0% 4%);
+
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(0 0% 4%);
+
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(0 0% 4%);
+
+  --color-primary: hsl(11 100% 28%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-primary-light: hsl(11 100% 97%);
+
+  --color-secondary: hsl(0 0% 96%);
+  --color-secondary-foreground: hsl(0 0% 4%);
+
+  --color-muted: hsl(0 0% 96%);
+  --color-muted-foreground: hsl(0 0% 43%);
+
+  --color-accent: hsl(0 0% 96%);
+  --color-accent-foreground: hsl(0 0% 4%);
+
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+
+  --color-border: hsl(0 0% 90%);
+  --color-input: hsl(0 0% 92%);
+  --color-ring: hsl(11 100% 28%);
+}
+
+@layer base {
+  :root {
+    /* Custom design system variables */
+    --radius-xl: 14px;
+    --border-width: 1px;
+    --gap-2: 8px;
+    --p-2: 8px;
+    --gap-1: 4px;
+    --sidebar-foreground: 0 0% 4%;
+    --gray-01: #2a2a2a;
+    --gray-02: #555;
+    --gray-03: #6d6d6d;
+    --weight-medium: 500;
+    --primary-light-bg: hsl(11 100% 92%);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: "Pretendard", -apple-system, Roboto, Helvetica, sans-serif;
+  }
+}
+
+@layer components {
+  .rdp-day_selected {
+    color: white !important;
+  }
+}

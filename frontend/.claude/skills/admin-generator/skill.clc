@@ -1,0 +1,6 @@
+{
+  "name": "admin-generator",
+  "version": "1.0.0",
+  "description": "관리자 페이지 CRUD 구조 자동 생성 도구. Next.js 관리자 페이지에 목록/상세/수정/신규 페이지를 일관된 디자인으로 생성. 테이블 목록, 검색 필터, 페이지네이션, 폼 입력, 유효성 검사 포함. 상품관리, 리뷰관리, 주문관리 등 반복적인 CRUD 페이지 빠르게 구축. 키워드: 관리자페이지, admin panel, CRUD generator, Next.js admin, 백오피스, 테이블 생성, 폼 생성.",
+  "main": "SKILL.md"
+}
