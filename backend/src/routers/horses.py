@@ -1,15 +1,12 @@
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.routers.responses import R400, R404, R409
 from src.schemas.common import ListResponse
 from src.schemas.horse import HorseCreate, HorseRead, HorseUpdate
 from src.services import horse as svc
 from src.services.crud_base import list_rows
 from src.utils.deps import get_db
-
-R400 = {400: {"description": "Invalid filter/order"}}
-R404 = {404: {"description": "Not found"}}
-R409 = {409: {"description": "Duplicate microchip number"}}
 
 router = APIRouter(prefix="/horses", tags=["horses"])
 

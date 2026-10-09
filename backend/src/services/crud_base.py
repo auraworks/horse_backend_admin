@@ -4,10 +4,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from fastapi import HTTPException, Request
-from sqlalchemy import BigInteger, Boolean, Integer, Select, String, Text, func, select
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy import BigInteger, Boolean, Enum, Select, String, Text, func, select
+from sqlalchemy.exc import DataError, DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute  # noqa: E402
+from sqlalchemy.orm import InstrumentedAttribute
 
 RESERVED = {"page", "limit", "order"}
 OPS = {"eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "in", "is"}
@@ -56,7 +56,7 @@ def _condition(col: InstrumentedAttribute, op: str, raw: str, field: str):
         body = raw[1:-1] if raw.startswith("(") and raw.endswith(")") else raw
         return col.in_([_coerce(col, x.strip(), field) for x in body.split(",") if x.strip()])
     if op in ("like", "ilike"):
-        if not isinstance(col.type, (String, Text)):
+        if isinstance(col.type, Enum) or not isinstance(col.type, (String, Text)):
             raise _bad(f"Filter '{field}': like/ilike only apply to text fields")
         return getattr(col, op)(raw)
     v = _coerce(col, raw, field)
@@ -113,9 +113,12 @@ async def list_rows(
     try:
         count = (await session.execute(select(func.count()).select_from(base.order_by(None).subquery()))).scalar_one()
         rows = list((await session.execute(stmt)).scalars().all())
-    except DBAPIError as e:  # safety net: bad user input that reached the DB
+    except (DataError, ProgrammingError) as e:  # safety net: bad user input that reached the DB
         await session.rollback()
         raise _bad(f"Invalid filter value: {type(e.orig).__name__}")
+    except DBAPIError:  # connection/timeouts etc. are server errors
+        await session.rollback()
+        raise
     return rows, count
 
 

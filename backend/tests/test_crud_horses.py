@@ -138,3 +138,24 @@ async def test_bad_input_is_400_not_500(client, api_headers):
     assert r.status_code == 400
     r = await client.get("/api/v1/photos", params={"fileSize": "eq.99999999999"}, headers=api_headers)
     assert r.status_code == 200
+
+
+async def test_enum_like_is_400(client, api_headers):
+    r = await client.get(URL, params={"chipInputMethod": "ilike.x"}, headers=api_headers)
+    assert r.status_code == 400
+
+
+async def test_operational_error_propagates_500(client, api_headers, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    async def boom(self, *a, **k):
+        raise OperationalError("select", {}, Exception("conn lost"))
+
+    monkeypatch.setattr(AsyncSession, "execute", boom)
+    from httpx import ASGITransport, AsyncClient
+    from src.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test") as c:
+        r = await c.get(URL, headers=api_headers)
+    assert r.status_code == 500

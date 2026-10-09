@@ -1,15 +1,12 @@
 from fastapi import APIRouter, Depends, Path, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.routers.responses import R400, R404
 from src.schemas.common import ListResponse
 from src.schemas.photo_metadata import PhotoMetadataRead
 from src.services import photo_metadata as svc
 from src.services.crud_base import list_rows
 from src.utils.deps import get_db
-
-R400 = {400: {"description": "Invalid filter/order"}}
-R404 = {404: {"description": "Not found"}}
-R409 = {409: {"description": "Duplicate microchip number"}}
 
 router = APIRouter(prefix="/photo-metadata", tags=["photo-metadata"])
 
