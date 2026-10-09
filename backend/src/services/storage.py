@@ -36,7 +36,8 @@ def presign_view(key: str) -> str:
 
 def presign_download(key: str, file_name: str) -> str:
     """Presigned GET URL forcing a download with the given file name."""
-    disposition = "attachment; filename*=UTF-8''" + quote(file_name, safe="")
+    ascii_name = file_name.encode("ascii", "ignore").decode().replace('"', "").replace("\\", "") or "download"
+    disposition = f'attachment; filename="{ascii_name}"; filename*=UTF-8' + "''" + quote(file_name, safe="")
     return _client().generate_presigned_url(
         "get_object",
         Params={

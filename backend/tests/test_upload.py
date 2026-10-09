@@ -223,3 +223,37 @@ async def test_dashboard_login_page(client):
         follow_redirects=False,
     )
     assert ok.status_code in (302, 303)
+
+
+async def test_refresh_failure_after_commit_keeps_object(client, api_headers, s3, monkeypatch):
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    hid = await mk_horse(client, api_headers)
+
+    async def boom(self, *a, **k):
+        raise RuntimeError("refresh failed")
+
+    monkeypatch.setattr(AsyncSession, "refresh", boom)
+    with pytest.raises(RuntimeError):
+        await upload(client, api_headers, hid)
+    monkeypatch.undo()
+    assert len(s3.list_objects_v2(Bucket=settings.S3_BUCKET)["Contents"]) == 1
+    assert len((await client.get(f"/api/v1/horses/{hid}/photos", headers=api_headers)).json()) == 1
+
+
+async def test_naive_captured_at_is_utc(client, api_headers):
+    hid = await mk_horse(client, api_headers)
+    r = await upload(client, api_headers, hid, m=meta(capturedAt="2026-10-09T01:23:45"))
+    assert r.status_code == 201
+    assert r.json()["metadata"]["capturedAt"].startswith("2026-10-09T01:23:45") and r.json()["metadata"]["capturedAt"].endswith(("Z", "+00:00"))
+    r = await upload(client, api_headers, hid, m=meta(capturedAt="2026-10-09T10:23:45+09:00"))
+    assert r.json()["metadata"]["capturedAt"].startswith("2026-10-09T01:23:45")
+
+
+async def test_content_type_params_and_ascii_filename(client, api_headers):
+    hid = await mk_horse(client, api_headers)
+    r = await upload(client, api_headers, hid, ctype="Image/JPEG; charset=binary")
+    assert r.status_code == 201
+    d = (await client.get(f"/api/v1/photos/{r.json()['id']}/download-url", headers=api_headers)).json()
+    assert 'filename%3D%22' in d["url"] or 'filename="' in unquote(d["url"])
+    assert "filename*%3DUTF-8" in d["url"] or "filename*=UTF-8" in unquote(d["url"])

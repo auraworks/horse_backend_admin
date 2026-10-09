@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from src.models.enums import ChipInputMethod, FileFormat, PartCode
 from src.schemas.common import CamelModel
@@ -33,10 +33,16 @@ class MetadataInput(CamelModel):
     device_model: str = Field(min_length=1, description="Device model (non-empty)", examples=["SM-S918N"])
     meta_sha256: str = Field(pattern=SHA, description="SHA-256 of the metadata (stored as sent)", examples=[SHA_EX])
 
+    @field_validator("captured_at")
+    @classmethod
+    def _utc(cls, v: datetime) -> datetime:
+        """Naive timestamps are treated as UTC; aware ones are normalized to UTC."""
+        return v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v.astimezone(timezone.utc)
+
 
 METADATA_EXAMPLE = MetadataInput(
     file_format=FileFormat.jpeg, file_size=2345678, file_sha256=SHA_EX, width=4000, height=3000,
-    error_codes=[], captured_at=datetime(2026, 10, 9, 1, 23, 45),
+    error_codes=[], captured_at=datetime(2026, 10, 9, 1, 23, 45, tzinfo=timezone.utc),
     gps=Gps(latitude=37.5665, longitude=126.978, accuracy_meters=4.5),
     iso=100, exposure_time_ns=8000000, f_number=1.8, focal_length_mm=6.9, zoom_ratio=1.0,
     af_state="FOCUSED_LOCKED", ambient_lux=300.0, blur_score=12.5, brightness=0.52,

@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import HTTPException, UploadFile
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,12 @@ PHOTO_COLS = (
     "file_sha256", "width", "height", "check_codes", "recognized_microchip_no", "evidence_source", "created_at",
 )
 META_COLS = tuple(k for k in PhotoMetadataOut.model_fields if k != "gps")
+
+
+def _is_unique_violation(e: IntegrityError) -> bool:
+    orig = e.orig
+    state = getattr(orig, "sqlstate", None) or getattr(getattr(orig, "__cause__", None), "sqlstate", None)
+    return state == "23505"
 
 
 def _422(detail) -> HTTPException:
@@ -99,9 +106,10 @@ async def upload_photo(
         evidence_source = None
 
     expected = CONTENT_TYPES[meta_in.file_format]
-    if photo.content_type != expected:
+    ctype = (photo.content_type or "").split(";")[0].strip().lower()
+    if ctype != expected:
         raise _422(
-            f"Photo content-type {photo.content_type!r} does not match fileFormat "
+            f"Photo content-type {ctype!r} does not match fileFormat "
             f"{meta_in.file_format.value!r} (expected {expected!r})"
         )
     data = await photo.read(settings.MAX_UPLOAD_BYTES + 1)
@@ -114,6 +122,7 @@ async def upload_photo(
     key = f"horses/{horse_id}/{slot.value}/{file_name}"
     await storage.upload_bytes(key, data, expected)
 
+    committed = False
     try:
         has_selected = (
             await session.execute(
@@ -143,15 +152,22 @@ async def upload_photo(
         if slot is PartCode.microchip:
             horse.chip_input_method = evidence_source
         await session.commit()
-        await session.refresh(row)
-        await session.refresh(meta)
-    except Exception:
-        await session.rollback()
-        try:
-            await storage.delete_objects([key])
-        except Exception:
-            logger.exception("Failed to clean up S3 object after DB error: %s", key)
+        committed = True
+    except BaseException as e:  # incl. cancellation (client disconnect): never orphan the object
+        if not committed:
+            try:
+                await session.rollback()
+            except BaseException:
+                logger.exception("Rollback failed after upload error")
+            try:
+                await storage.delete_objects([key])
+            except BaseException:
+                logger.exception("Failed to clean up S3 object after DB error: %s", key)
+        if isinstance(e, IntegrityError) and _is_unique_violation(e):
+            raise HTTPException(status_code=409, detail="Concurrent upload conflict on representative photo; retry")
         raise
+    await session.refresh(row)
+    await session.refresh(meta)
     return to_detail(row, meta)
 
 
@@ -167,7 +183,13 @@ async def set_representative(session: AsyncSession, horse_id: int, slot: PartCod
         .values(is_selected=False)
     )
     await session.execute(update(Photo).where(Photo.id == photo_id).values(is_selected=True))
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        if _is_unique_violation(e):
+            raise HTTPException(status_code=409, detail="Concurrent representative change; retry")
+        raise
     await session.refresh(target)
     return await _detail(session, target)
 
