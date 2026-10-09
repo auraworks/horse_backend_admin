@@ -2,17 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { ko } from "date-fns/locale";
-import { CalendarIcon, RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { api, type ChipInputMethod, type Horse } from "@/lib/api";
 import { CHIP_METHOD_LABEL, dash, formatDate, kstMidnightIso } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Calendar } from "@/components/ui/Calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/Popover";
+import { DatePicker } from "@/components/ui/DatePicker";
 import {
   Select,
   SelectContent,
@@ -85,38 +81,6 @@ function pageItems(current: number, total: number): (number | "…")[] {
   return out;
 }
 
-function DateButton({
-  value,
-  onChange,
-}: {
-  value?: Date;
-  onChange: (d?: Date) => void;
-}) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn(
-            "w-[142px] h-[38px] justify-between text-left font-normal bg-white border-[#EBEBEB]",
-            value && "text-primary font-semibold"
-          )}
-        >
-          {value ? (
-            format(value, "yyyy-MM-dd", { locale: ko })
-          ) : (
-            <span className="text-[#727272] text-xs">날짜 입력</span>
-          )}
-          <CalendarIcon className="ml-auto h-3 w-3 text-[#727272]" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 border-0 shadow-none" align="start">
-        <Calendar mode="single" selected={value} onSelect={onChange} />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 const TH = "text-center text-[#0A0A0A] text-xs font-medium leading-5";
 const TD = "text-center text-[#0A0A0A] text-xs font-medium leading-5";
 
@@ -173,9 +137,9 @@ export default function HorsesPage() {
           <div className="flex items-center gap-2">
             <label className="text-base font-semibold text-[#555] leading-6">등록일</label>
             <div className="flex items-center gap-2.5">
-              <DateButton value={form.from} onChange={(d) => setForm((s) => ({ ...s, from: d }))} />
+              <DatePicker value={form.from} onChange={(d) => setForm((s) => ({ ...s, from: d }))} />
               <span className="text-xs text-black">-</span>
-              <DateButton value={form.to} onChange={(d) => setForm((s) => ({ ...s, to: d }))} />
+              <DatePicker value={form.to} onChange={(d) => setForm((s) => ({ ...s, to: d }))} />
             </div>
           </div>
 

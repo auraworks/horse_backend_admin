@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { format, parseISO } from "date-fns";
 import { useRouter } from "next/navigation";
 import { Download, List, Trash2 } from "lucide-react";
 import {
@@ -16,6 +17,7 @@ import { CHIP_METHOD_LABEL, EXT, formatKst } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { Modal } from "@/components/ui/Modal/Modal";
 import { useModal } from "@/components/hooks/useModal";
 import { useToast } from "@/components/ui/Toast/ToastProvider";
@@ -278,7 +280,12 @@ export default function HorseDetailPage({ params }: { params: Promise<{ id: stri
         </div>
         <div className="flex flex-wrap gap-4">
           <Field label="생년월일">
-            <Input className={INPUT} type="date" value={form.birthDate} onChange={setField("birthDate")} />
+            <DatePicker
+              className="flex-1 h-10 text-sm"
+              placeholder="생년월일을 선택해주세요"
+              value={form.birthDate ? parseISO(form.birthDate) : undefined}
+              onChange={(d) => setForm((s) => (s ? { ...s, birthDate: d ? format(d, "yyyy-MM-dd") : "" } : s))}
+            />
           </Field>
           <Field label="성별">
             <Input className={INPUT} placeholder="예) 수, 암, 거" value={form.sex} onChange={setField("sex")} maxLength={10} />

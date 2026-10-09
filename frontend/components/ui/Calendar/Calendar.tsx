@@ -21,7 +21,11 @@ function Calendar({
   showOutsideDays = true,
   ...props
 }: CalendarProps) {
-  const [month, setMonth] = React.useState<Date>(new Date());
+  // Open on the selected date's month (e.g. a birth date years ago), falling back to today
+  const initialSelected = (props as { selected?: unknown }).selected;
+  const [month, setMonthState] = React.useState<Date>(
+    props.defaultMonth ?? (initialSelected instanceof Date ? initialSelected : new Date())
+  );
   const [selectedMonth, setSelectedMonth] = React.useState(month.getMonth());
   const [selectedYear, setSelectedYear] = React.useState(month.getFullYear());
 
@@ -45,34 +49,32 @@ function Calendar({
     (_, i) => new Date().getFullYear() - 50 + i
   );
 
+  const setMonth = (d: Date) => {
+    setMonthState(d);
+    setSelectedMonth(d.getMonth());
+    setSelectedYear(d.getFullYear());
+  };
+
   const handlePreviousMonth = () => {
     const newDate = new Date(month);
     newDate.setMonth(newDate.getMonth() - 1);
     setMonth(newDate);
-    setSelectedMonth(newDate.getMonth());
-    setSelectedYear(newDate.getFullYear());
   };
 
   const handleNextMonth = () => {
     const newDate = new Date(month);
     newDate.setMonth(newDate.getMonth() + 1);
     setMonth(newDate);
-    setSelectedMonth(newDate.getMonth());
-    setSelectedYear(newDate.getFullYear());
   };
 
   const handleMonthChange = (value: string) => {
     const newMonth = parseInt(value);
-    setSelectedMonth(newMonth);
-    const newDate = new Date(selectedYear, newMonth, 1);
-    setMonth(newDate);
+    setMonth(new Date(selectedYear, newMonth, 1));
   };
 
   const handleYearChange = (value: string) => {
     const newYear = parseInt(value);
-    setSelectedYear(newYear);
-    const newDate = new Date(newYear, selectedMonth, 1);
-    setMonth(newDate);
+    setMonth(new Date(newYear, selectedMonth, 1));
   };
 
   return (
@@ -85,6 +87,8 @@ function Calendar({
       {/* Custom Header */}
       <div className="flex items-center justify-between h-8 mb-4">
         <button
+          type="button"
+          aria-label="이전 달"
           onClick={handlePreviousMonth}
           className="flex w-8 h-8 justify-center items-center rounded-md hover:bg-accent transition-colors focus:outline-none"
         >
@@ -126,6 +130,8 @@ function Calendar({
         </div>
 
         <button
+          type="button"
+          aria-label="다음 달"
           onClick={handleNextMonth}
           className="flex w-8 h-8 justify-center items-center rounded-md hover:bg-accent transition-colors focus:outline-none"
         >
