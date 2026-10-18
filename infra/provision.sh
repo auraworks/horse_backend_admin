@@ -30,6 +30,8 @@ aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-confi
 aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration \
   '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging 'TagSet=[{Key=Project,Value=horse-admin}]'
+# Browser GET via presigned URL (admin ZIP download fetches photos straight from S3)
+aws s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration   '{"CORSRules":[{"AllowedOrigins":["https://main.d1qloe8upl7pwc.amplifyapp.com","http://localhost:3000"],"AllowedMethods":["GET","HEAD"],"AllowedHeaders":["*"],"MaxAgeSeconds":3600}]}'
 
 # 2. Security groups
 sg_id(){ aws ec2 describe-security-groups --filters Name=group-name,Values="$1" Name=vpc-id,Values=$VPC \
