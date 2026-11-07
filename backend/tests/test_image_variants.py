@@ -90,6 +90,7 @@ async def test_image_variant_flow(client, api_headers, s3):
     # default: 302 redirect to the presigned URL
     r3 = await client.get(url, params={"width": 1024}, headers=api_headers)
     assert r3.status_code == 302 and "derived/" in r3.headers["location"]
+    assert r3.headers["location"].startswith("https://")  # S3 host kept (not made relative)
     assert "max-age" in r3.headers["cache-control"]
 
     # other combinations are separate cache entries; png ignores quality
@@ -108,11 +109,16 @@ async def test_image_variant_errors(client, api_headers, s3):
     for params in ({"type": "gif"}, {"width": 5000}, {"width": 0}, {"quality": 0}):
         assert (await client.get(url, params=params, headers=api_headers)).status_code == 422
     assert (await client.get("/api/v1/photos/999999/image", headers=api_headers)).status_code == 404
-    assert (await client.get(url)).status_code == 401
+    # public: no API key needed for variants, but other photo APIs still require it
+    pub = await client.get(url, params={"width": 64})
+    assert pub.status_code == 302 and "public" in pub.headers["cache-control"]
+    assert (await client.get(f"/api/v1/photos/{pid}")).status_code == 401
+    assert (await client.get(f"/api/v1/photos/{pid}/download-url")).status_code == 401
     # undecodable original -> 422, nothing cached
+    before = len(keys(s3, "derived/"))
     bad = await photo_id(client, api_headers, data=b"\x00garbage", chip="410000000000002")
     r = await client.get(f"/api/v1/photos/{bad}/image", params={"width": 100}, headers=api_headers)
-    assert r.status_code == 422 and keys(s3, "derived/") == []
+    assert r.status_code == 422 and len(keys(s3, "derived/")) == before
 
 
 async def test_horse_delete_removes_variants(client, api_headers, s3):

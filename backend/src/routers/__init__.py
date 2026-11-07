@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends
 
-from src.routers import horse_photos, horses, photo_metadata, photo_parts, photos
+from src.routers import horse_photos, horses, photo_metadata, photo_parts, photos, public_images
 from src.utils.deps import require_api_key
 
 api_v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
+# No API key: only the lightweight image variants (GET /api/v1/photos/{id}/image).
+public_v1 = APIRouter(prefix="/api/v1")
+public_v1.include_router(public_images.router)
 
 
 @api_v1.get("/ping", summary="Ping (auth probe)", tags=["system"])

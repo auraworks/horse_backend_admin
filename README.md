@@ -203,6 +203,7 @@ curl -X POST "https://rtt4o67y3m.execute-api.ap-northeast-2.amazonaws.com/api/v1
 
 **경량 이미지 (on-the-fly 변환)** — `GET /api/v1/photos/{photoId}/image?type=webp&width=1024`
 - `type`: `webp`(기본) | `avif` | `jpeg` | `png`, `width`/`height`: 최대 크기(16~4096px, 비율 유지·확대 안 함·EXIF 회전 반영, 생략한 변은 4096까지), `quality`: 1~100(기본 80, png 무시), `redirect`: `true`(기본, presigned URL로 `302`) / `false`(JSON `{url, expiresIn, contentType, cached}`).
+- **공개 API (X-API-Key 불필요)**: 브라우저나 `<img src>`에 URL을 그대로 넣으면 보입니다. 공개되는 것은 변환본뿐이며(EXIF/GPS 제거됨), 원본(`viewUrl`, `download-url`)과 나머지 API는 계속 키가 필요합니다. 사진 id가 순번이라 id만 알면 누구나 변환본을 볼 수 있습니다.
 - **원본은 절대 수정하지 않습니다.** 변환본은 별도 사본으로 S3 `derived/<원본키>/w{W}_h{H}_q{Q}.{ext}`에 저장되고, 같은 조합의 두 번째 요청부터는 캐시를 씁니다. 사진/말 삭제 시 변환본도 함께 삭제됩니다.
 - 변환은 Lambda `horse-admin-img-transform`(Pillow, arm64, 2GB)이 수행합니다 (EC2 메모리 보호). 로컬 개발은 `IMAGE_TRANSFORM_MODE=local`로 프로세스 안에서 변환합니다.
 - 관리자 웹은 이 API를 쓰지 않고 원본(`viewUrl`)을 그대로 보여주며, 다운로드도 원본입니다.

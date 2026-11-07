@@ -215,7 +215,7 @@ async def test_dashboard_login_page(client):
     r = await client.get("/dashboard/login")
     assert r.status_code == 200
     r = await client.get("/dashboard/", follow_redirects=False)
-    assert r.status_code in (302, 303, 307) and "login" in r.headers["location"]
+    assert r.status_code in (302, 303, 307) and r.headers["location"].startswith("/dashboard/login")  # own host -> relative
     bad = await client.post("/dashboard/login", data={"username": "admin", "password": "wrong"}, follow_redirects=False)
     assert bad.status_code == 400
     ok = await client.post(
