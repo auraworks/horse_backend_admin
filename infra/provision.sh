@@ -33,6 +33,10 @@ aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging 'TagSet=[{Key=Project,
 # Browser GET via presigned URL (admin ZIP download fetches photos straight from S3)
 aws s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration   '{"CORSRules":[{"AllowedOrigins":["https://main.d1qloe8upl7pwc.amplifyapp.com","http://localhost:3000"],"AllowedMethods":["GET","HEAD"],"AllowedHeaders":["*"],"MaxAgeSeconds":3600}]}'
 
+# Presigned direct uploads (photos up to 100MB, bypassing API Gateway's 10MB body cap) land in incoming/
+# and are moved to horses/ on /complete; anything never completed expires after 1 day.
+aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" --lifecycle-configuration   '{"Rules":[{"ID":"expire-incoming-uploads","Status":"Enabled","Filter":{"Prefix":"incoming/"},"Expiration":{"Days":1}},{"ID":"abort-incomplete-multipart","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}}]}'
+
 # 2. Security groups
 sg_id(){ aws ec2 describe-security-groups --filters Name=group-name,Values="$1" Name=vpc-id,Values=$VPC \
   --query 'SecurityGroups[0].GroupId' --output text; }

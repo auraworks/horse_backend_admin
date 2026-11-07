@@ -107,3 +107,29 @@ class Stats(CamelModel):
     horse_count: int = Field(description="Total horses", examples=[12])
     photo_count: int = Field(description="Total photos", examples=[80])
     horses_with_all_six_parts: int = Field(description="Horses with >=1 photo in each of the 6 body parts (microchip excluded)", examples=[5])
+
+
+class UploadUrlRequest(CamelModel):
+    """Step 1 of the presigned upload flow (photos up to MAX_UPLOAD_BYTES, default 100MB)."""
+
+    file_format: FileFormat = Field(description="jpeg | png (decides the Content-Type S3 will accept)", examples=["jpeg"])
+    file_size: int = Field(gt=0, description="File size in bytes (checked against the upload limit)", examples=[23456789])
+
+
+class UploadUrlResponse(CamelModel):
+    upload_url: str = Field(description="S3 URL to POST the multipart form to (no X-API-Key header)", examples=["https://horse-admin-photos-896860228345.s3.amazonaws.com/"])
+    fields: dict[str, str] = Field(description="Form fields to send verbatim BEFORE the `file` part", examples=[{"key": "incoming/1/front_full/<uuid>.jpg", "Content-Type": "image/jpeg", "policy": "...", "x-amz-signature": "..."}])
+    upload_key: str = Field(description="Pass this to the complete endpoint after S3 answers 204", examples=["incoming/1/front_full/0b6f0c8e-6a3c-4f0e-9d1c-2f1f6f4b8a10.jpg"])
+    content_type: str = Field(description="Content-Type of the uploaded file", examples=["image/jpeg"])
+    max_bytes: int = Field(description="Largest file S3 will accept for this form", examples=[104857600])
+    expires_in: int = Field(description="Seconds until the form expires", examples=[900])
+
+
+class CompleteUploadRequest(CamelModel):
+    """Step 3 of the presigned upload flow: register the object uploaded to S3."""
+
+    upload_key: str = Field(max_length=512, description="`uploadKey` from the upload-url response", examples=["incoming/1/front_full/0b6f0c8e-6a3c-4f0e-9d1c-2f1f6f4b8a10.jpg"])
+    file_name: str | None = Field(default=None, max_length=1024, description="Original file name (optional; defaults to the object name)", examples=["IMG_0001.jpg"])
+    metadata: MetadataInput = Field(description="Capture metadata (same schema as the multipart `metadata` field); fileSize must equal the uploaded size")
+    recognized_microchip_number: str | None = Field(default=None, description="Required when slot=microchip: 15 digits", examples=["410123456789012"])
+    evidence_source: ChipInputMethod | None = Field(default=None, description="Required when slot=microchip: ocr | manual")

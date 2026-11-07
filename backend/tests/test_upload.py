@@ -119,10 +119,10 @@ async def test_wrong_content_type_422(client, api_headers):
 
 async def test_too_large_413(client, api_headers, s3):
     hid = await mk_horse(client, api_headers)
-    r = await upload(client, api_headers, hid, data=b"x" * (settings.MAX_UPLOAD_BYTES + 1))
-    assert r.status_code == 413
+    r = await upload(client, api_headers, hid, data=b"x" * (settings.MAX_DIRECT_UPLOAD_BYTES + 1))
+    assert r.status_code == 413 and "upload-url" in r.json()["detail"]
     assert "Contents" not in s3.list_objects_v2(Bucket=settings.S3_BUCKET)
-    ok = await upload(client, api_headers, hid, data=b"x" * settings.MAX_UPLOAD_BYTES)
+    ok = await upload(client, api_headers, hid, data=b"x" * settings.MAX_DIRECT_UPLOAD_BYTES)
     assert ok.status_code == 201
 
 
@@ -301,3 +301,94 @@ def test_client_file_name_helper():
     assert f("a\x00b\x1f.jpg") == "ab.jpg"
     assert f("..") == "" and f(None) == "" and f("") == "" and f("dir/") == ""
     assert len(f("x" * 400 + ".jpg")) == 255
+
+
+# ---- presigned direct-to-S3 upload (up to MAX_UPLOAD_BYTES) ----
+
+
+async def upload_url(client, h, horse_id, slot="front_full", fmt="jpeg", size=4):
+    return await client.post(
+        f"/api/v1/horses/{horse_id}/photos/{slot}/upload-url", headers=h, json={"fileFormat": fmt, "fileSize": size}
+    )
+
+
+async def complete(client, h, horse_id, key, slot="front_full", m=None, **extra):
+    body = {"uploadKey": key, "fileName": "IMG_0001.jpg", "metadata": m if m is not None else meta(), **extra}
+    return await client.post(f"/api/v1/horses/{horse_id}/photos/{slot}/complete", headers=h, json=body)
+
+
+def keys(s3):
+    return sorted(o["Key"] for o in s3.list_objects_v2(Bucket=settings.S3_BUCKET).get("Contents", []))
+
+
+async def test_presigned_upload_flow(client, api_headers, s3):
+    import base64
+
+    assert settings.MAX_UPLOAD_BYTES == 100 * 1024 * 1024
+    hid = await mk_horse(client, api_headers)
+    r = await upload_url(client, api_headers, hid, size=settings.MAX_UPLOAD_BYTES)
+    assert r.status_code == 200, r.text
+    b = r.json()
+    key = b["uploadKey"]
+    assert key.startswith(f"incoming/{hid}/front_full/") and key.endswith(".jpg")
+    assert b["fields"]["key"] == key and b["fields"]["Content-Type"] == "image/jpeg"
+    assert b["maxBytes"] == settings.MAX_UPLOAD_BYTES and b["expiresIn"] == settings.UPLOAD_URL_TTL
+    policy = json.loads(base64.b64decode(b["fields"]["policy"]))
+    assert ["content-length-range", 1, settings.MAX_UPLOAD_BYTES] in policy["conditions"]
+    assert {"Content-Type": "image/jpeg"} in policy["conditions"]
+
+    data = b"JPEG"  # client uploads to S3 directly (simulated)
+    s3.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=data, ContentType="image/jpeg")
+    r = await complete(client, api_headers, hid, key)
+    assert r.status_code == 201, r.text
+    p = r.json()
+    assert p["isSelected"] is True and p["fileName"] == "IMG_0001.jpg" and p["fileSize"] == 4
+    final = f"horses/{hid}/front_full/{key.rsplit('/', 1)[1]}"
+    assert keys(s3) == [final]  # moved out of incoming/
+    assert s3.get_object(Bucket=settings.S3_BUCKET, Key=final)["Body"].read() == data
+    # retrying complete after success -> 409, no duplicate row
+    assert (await complete(client, api_headers, hid, key)).status_code == 409
+    assert len((await client.get(f"/api/v1/horses/{hid}/photos", headers=api_headers)).json()) == 1
+
+
+async def test_presigned_microchip_slot(client, api_headers, s3):
+    hid = await mk_horse(client, api_headers)
+    key = (await upload_url(client, api_headers, hid, slot="microchip")).json()["uploadKey"]
+    s3.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=b"abcd", ContentType="image/jpeg")
+    assert (await complete(client, api_headers, hid, key, slot="microchip")).status_code == 422
+    r = await complete(client, api_headers, hid, key, slot="microchip",
+                       recognizedMicrochipNumber="410999999999999", evidenceSource="ocr")
+    assert r.status_code == 201, r.text
+    assert (await client.get(f"/api/v1/horses/{hid}", headers=api_headers)).json()["chipInputMethod"] == "ocr"
+
+
+async def test_presigned_upload_url_errors(client, api_headers):
+    hid = await mk_horse(client, api_headers)
+    assert (await upload_url(client, api_headers, hid, size=settings.MAX_UPLOAD_BYTES + 1)).status_code == 413
+    assert (await upload_url(client, api_headers, 999999)).status_code == 404
+    assert (await upload_url(client, api_headers, hid, fmt="gif")).status_code == 422
+    assert (await upload_url(client, api_headers, hid, size=0)).status_code == 422
+    r = await upload_url(client, api_headers, hid, fmt="png")
+    assert r.json()["uploadKey"].endswith(".png") and r.json()["contentType"] == "image/png"
+
+
+async def test_presigned_complete_errors(client, api_headers, s3):
+    hid = await mk_horse(client, api_headers)
+    other = await mk_horse(client, api_headers, chip="410000000000002")
+    key = (await upload_url(client, api_headers, hid)).json()["uploadKey"]
+    # not uploaded yet
+    assert (await complete(client, api_headers, hid, key)).status_code == 422
+    s3.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=b"abcd", ContentType="image/jpeg")
+    # key of another horse / slot / arbitrary key
+    assert (await complete(client, api_headers, other, key)).status_code == 422
+    assert (await complete(client, api_headers, hid, key, slot="left_full")).status_code == 422
+    assert (await complete(client, api_headers, hid, f"horses/{hid}/front_full/x.jpg")).status_code == 422
+    # size / format mismatch
+    assert (await complete(client, api_headers, hid, key, m=meta(fileSize=5))).status_code == 422
+    assert (await complete(client, api_headers, hid, key, m=meta(fileFormat="png"))).status_code == 422
+    bad_ct = (await upload_url(client, api_headers, hid)).json()["uploadKey"]
+    s3.put_object(Bucket=settings.S3_BUCKET, Key=bad_ct, Body=b"abcd", ContentType="text/plain")
+    assert (await complete(client, api_headers, hid, bad_ct)).status_code == 422
+    # nothing registered, incoming objects untouched
+    assert (await client.get(f"/api/v1/horses/{hid}/photos", headers=api_headers)).json() == []
+    assert all(k.startswith("incoming/") for k in keys(s3))

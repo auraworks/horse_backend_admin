@@ -9,7 +9,16 @@ from src.models import Horse
 from src.models.enums import ChipInputMethod, PartCode
 from src.routers.responses import R404
 from src.schemas.horse import HorseRead
-from src.schemas.upload import METADATA_EXAMPLE, DownloadUrl, MetadataInput, PhotoDetail, RepresentativeBody
+from src.schemas.upload import (
+    METADATA_EXAMPLE,
+    CompleteUploadRequest,
+    DownloadUrl,
+    MetadataInput,
+    PhotoDetail,
+    RepresentativeBody,
+    UploadUrlRequest,
+    UploadUrlResponse,
+)
 from src.services import horse_photos as svc
 from src.utils.deps import get_db
 
@@ -20,6 +29,8 @@ HorseId = Annotated[int, Path(gt=0, le=2147483647, description="Horse ID")]
 UPLOAD_DOC = (
     "Multipart upload of one photo into a slot (`front_full`, `forehead_close`, `left_full`, `right_full`, "
     "`right_rear_oblique`, `left_rear_oblique`, `microchip`).\n\n"
+    "**Files over 10MB:** API Gateway rejects request bodies above 10MB, so use the presigned flow instead "
+    "(`POST .../upload-url` -> POST the file to S3 -> `POST .../complete`), which accepts up to 100MB.\n\n"
     "**Fields**\n"
     "- `photo` (file, `image/jpeg` or `image/png`, max 10MB; content-type must match `metadata.fileFormat`)\n"
     "- `metadata` (string): JSON object, schema below\n"
@@ -74,7 +85,7 @@ async def list_horse_photos(
     tags=["photos"],
     summary="Upload a photo with metadata into a slot",
     description=UPLOAD_DOC,
-    responses={**R404, 413: {"description": "Photo larger than 10MB"}, 422: {"description": "Validation error"}},
+    responses={**R404, 413: {"description": "Photo larger than 10MB (use the presigned upload flow)"}, 422: {"description": "Validation error"}},
 )
 async def upload_photo(
     horse_id: HorseId,
@@ -98,6 +109,58 @@ async def upload_photo(
     session: AsyncSession = Depends(get_db),
 ):
     return await svc.upload_photo(session, horse_id, slot, photo, metadata, recognized_microchip_number, evidence_source)
+
+
+PRESIGNED_DOC = (
+    "Presigned direct-to-S3 upload for photos up to 100MB (bypasses API Gateway's 10MB body limit).\n\n"
+    "1. `POST /horses/{horseId}/photos/{slot}/upload-url` with `{fileFormat, fileSize}` -> `uploadUrl`, `fields`, `uploadKey`.\n"
+    "2. `POST uploadUrl` as `multipart/form-data` **to S3, without X-API-Key**: every entry of `fields` as a form field "
+    "(verbatim), then the file as the **last** part named `file`. S3 answers `204`. "
+    "S3 itself rejects wrong Content-Type, files over `maxBytes`, or an expired form (`403`).\n"
+    "3. `POST /horses/{horseId}/photos/{slot}/complete` with `{uploadKey, fileName, metadata, recognizedMicrochipNumber?, "
+    "evidenceSource?}` -> `201 PhotoDetail`. `metadata.fileSize` must equal the uploaded size.\n\n"
+    "Unregistered uploads under `incoming/` are deleted automatically after 1 day."
+)
+
+
+@router.post(
+    "/horses/{horse_id}/photos/{slot}/upload-url",
+    response_model=UploadUrlResponse,
+    tags=["photos"],
+    summary="Presigned upload step 1: get an S3 upload form (up to 100MB)",
+    description=PRESIGNED_DOC,
+    responses={**R404, 413: {"description": "fileSize larger than 100MB"}, 422: {"description": "Validation error"}},
+)
+async def create_upload_url(
+    horse_id: HorseId,
+    slot: Annotated[PartCode, Path(description="Slot / part code")],
+    body: UploadUrlRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    return await svc.create_upload_url(session, horse_id, slot, body)
+
+
+@router.post(
+    "/horses/{horse_id}/photos/{slot}/complete",
+    response_model=PhotoDetail,
+    status_code=201,
+    tags=["photos"],
+    summary="Presigned upload step 3: register the photo uploaded to S3",
+    description=PRESIGNED_DOC,
+    responses={
+        **R404,
+        409: {"description": "This uploadKey was already registered"},
+        413: {"description": "Uploaded object larger than 100MB"},
+        422: {"description": "Validation error / object not uploaded / size or type mismatch"},
+    },
+)
+async def complete_upload(
+    horse_id: HorseId,
+    slot: Annotated[PartCode, Path(description="Slot / part code")],
+    body: CompleteUploadRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    return await svc.complete_upload(session, horse_id, slot, body)
 
 
 @router.put(

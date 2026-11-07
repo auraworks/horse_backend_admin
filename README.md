@@ -95,7 +95,9 @@ npm run dev                   # http://localhost:3000/admin
 | `AWS_REGION` | `ap-northeast-2` | |
 | `S3_BUCKET` | `horse-admin-photos-896860228345` | |
 | `PRESIGN_TTL` | `3600` | presigned URL 유효 시간(초) |
-| `MAX_UPLOAD_BYTES` | `10485760` | 업로드 최대 크기(10MB) |
+| `MAX_UPLOAD_BYTES` | `104857600` | S3 직접 업로드(presigned) 최대 크기(100MB) |
+| `UPLOAD_URL_TTL` | `900` | presigned 업로드 폼 유효 시간(초) |
+| `MAX_DIRECT_UPLOAD_BYTES` | `10485760` | multipart 직접 업로드 최대 크기(10MB, API Gateway 한도라 올려도 효과 없음) |
 | `CORS_ORIGINS` | `http://localhost:3000` | 쉼표 구분 허용 Origin |
 | `ADMIN_DB_USER` / `ADMIN_DB_PASSWORD` | `admin` / 개발용 기본값 | DB 대시보드 계정. 배포 시 랜덤 비밀번호로 덮어씀 |
 | `SESSION_SECRET` | API_ACCESS_KEY에서 파생 | 대시보드 세션 서명 |
@@ -182,6 +184,13 @@ curl -X POST "https://rtt4o67y3m.execute-api.ap-northeast-2.amazonaws.com/api/v1
 ```
 `slot=microchip`이면 추가 폼 필드 `-F recognizedMicrochipNumber=410123456789012 -F evidenceSource=ocr` (`ocr|manual`)가 필수이며, 말의 `chipInputMethod`가 `evidenceSource`로 갱신됩니다.
 오류: 404(없는 말), 422(검증 실패), 413(10MB 초과), 401(키 오류).
+
+**10MB 초과 ~ 100MB 사진 (S3 직접 업로드)** — API Gateway HTTP API 는 요청 본문 10MB 가 AWS 고정 한도라, 큰 사진은 앱이 S3 로 직접 올립니다.
+1. `POST /api/v1/horses/{horseId}/photos/{slot}/upload-url` `{"fileFormat":"jpeg","fileSize":23456789}` → `uploadUrl`, `fields`, `uploadKey` (S3 presigned POST, 15분 유효, `content-length-range` 1~100MB 를 S3 가 강제)
+2. `uploadUrl` 로 multipart POST (API 키 없음): `fields` 전부 + 마지막에 `file` → S3 `204`
+3. `POST /api/v1/horses/{horseId}/photos/{slot}/complete` `{uploadKey, fileName, metadata(객체), recognizedMicrochipNumber?, evidenceSource?}` → `201 PhotoDetail`. 서버가 객체 크기/형식을 확인하고 `incoming/` → `horses/` 로 이동. 같은 `uploadKey` 재호출은 409.
+
+미완료 업로드(`incoming/`)는 S3 수명주기 규칙으로 1일 후 자동 삭제됩니다. Flutter 예제는 `백엔드 설명서.md` 6.8 / 7.8.
 
 동작 규칙:
 - 슬롯에 처음 올린 사진은 자동으로 대표 사진(`isSelected=true`)이 됩니다. 변경은 `PUT .../representative`.
@@ -293,7 +302,7 @@ SQLAdmin을 백엔드에 내장했습니다: `https://rtt4o67y3m.execute-api.ap-
 
 ## 14. 알려진 제한 사항
 
-- 업로드 사진은 10MB 이하 (API Gateway HTTP API 페이로드 한도). 초과 시 413.
+- multipart 업로드는 10MB 이하 (API Gateway HTTP API 페이로드 고정 한도). 10MB 초과 ~ 100MB 는 S3 직접 업로드(`upload-url` → S3 → `complete`) 사용.
 - 해시(`fileSha256`, `metaSha256`)는 보낸 값 그대로 저장, 서버 재계산 없음.
 - EC2 보안그룹의 8000 포트가 인터넷에 열려 있습니다 (API Gateway가 HTTP 통합으로 접근하기 위함). API 키 없이 `/api/v1`은 거부되지만 직접 접근은 평문 HTTP입니다.
 - RDS는 public이며 보안그룹으로만 제한됩니다.
