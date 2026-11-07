@@ -18,17 +18,18 @@ router = APIRouter(tags=["photos"])
 
 
 IMAGE_DOC = (
-    "On-the-fly lightweight version of a photo, e.g. `?type=webp&width=1024`.\n\n"
-    "- `type`: `webp` (default) | `avif` | `jpeg` | `png`\n"
+    "Photo image, original or an on-the-fly lightweight version, e.g. `?type=webp&width=1024`.\n\n"
+    "- **No parameters** (`/photos/12/image`): the **original file, unmodified** (same bytes as uploaded).\n"
+    "- `type`: `webp` | `avif` | `jpeg` | `png` (omitted = same format as the original)\n"
     "- `width` / `height`: bounding box in px (16..4096). The image keeps its aspect ratio, is never upscaled, "
     "and EXIF orientation is applied. Omitted sides are unbounded (up to 4096).\n"
     "- `quality`: 1..100 (default 80, ignored for png)\n"
     "- `redirect`: `true` (default) answers `302` to a presigned S3 URL; "
-    "`false` answers JSON `{url, expiresIn, contentType, cached}`.\n\n"
+    "`false` answers JSON `{url, expiresIn, contentType, cached, original}`.\n\n"
     "The first request for a given combination generates the variant (about 1-5s for large originals); "
     "later requests reuse the stored copy. Variants are deleted together with the photo.\n\n"
     "**Public:** no X-API-Key needed, so the URL works directly in `<img src>` / a browser. "
-    "Variants never contain EXIF/GPS metadata; originals stay private."
+    "Variants contain no EXIF/GPS; the original (no parameters) is served as uploaded, including its EXIF."
 )
 
 
@@ -46,10 +47,12 @@ IMAGE_DOC = (
 )
 async def photo_image(
     photo_id: int = Path(gt=0, le=2147483647, description="ID"),
-    type_: Literal["webp", "avif", "jpeg", "png"] = Query("webp", alias="type", description="Output format"),
+    type_: Literal["webp", "avif", "jpeg", "png"] | None = Query(
+        None, alias="type", description="Output format (omitted = original's format)"
+    ),
     width: int | None = Query(None, ge=16, le=4096, description="Max width px"),
     height: int | None = Query(None, ge=16, le=4096, description="Max height px"),
-    quality: int = Query(80, ge=1, le=100, description="Encoder quality (lossy formats)"),
+    quality: int | None = Query(None, ge=1, le=100, description="Encoder quality, default 80 (lossy formats)"),
     redirect: bool = Query(True, description="302 to the image (true) or JSON with the URL (false)"),
     session: AsyncSession = Depends(get_db),
 ):

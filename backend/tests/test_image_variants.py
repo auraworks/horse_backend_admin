@@ -88,7 +88,7 @@ async def test_image_variant_flow(client, api_headers, s3):
     assert r2.json()["cached"] is True and len(keys(s3, "derived/")) == 1
 
     # default: 302 redirect to the presigned URL
-    r3 = await client.get(url, params={"width": 1024}, headers=api_headers)
+    r3 = await client.get(url, params={"type": "webp", "width": 1024}, headers=api_headers)
     assert r3.status_code == 302 and "derived/" in r3.headers["location"]
     assert r3.headers["location"].startswith("https://")  # S3 host kept (not made relative)
     assert "max-age" in r3.headers["cache-control"]
@@ -148,3 +148,23 @@ def test_lambda_handler(s3):
     bad = lambda_handler.handler({**ev, "srcKey": "horses/1/front_full/bad.jpg", "dstKey": "derived/x.webp"})
     assert bad["ok"] is False
     lambda_handler._s3 = None
+
+
+async def test_no_params_returns_original_unmodified(client, s3, api_headers):
+    data = jpeg_bytes(1200, 800)
+    pid = await photo_id(client, api_headers, data=data)
+    url = f"/api/v1/photos/{pid}/image"
+    r = await client.get(url, params={"redirect": "false"})  # public, no key
+    b = r.json()
+    assert r.status_code == 200 and b["original"] is True and b["contentType"] == "image/jpeg"
+    assert "/derived/" not in b["url"] and keys(s3, "derived/") == []
+    original_key = [k for k in keys(s3) if k.startswith("horses/")][0]
+    assert s3.get_object(Bucket=settings.S3_BUCKET, Key=original_key)["Body"].read() == data
+    r = await client.get(url)  # default redirect
+    assert r.status_code == 302 and original_key in r.headers["location"]
+
+    # width only -> resized, same format as the original (jpeg), not webp
+    r = await client.get(url, params={"width": 300, "redirect": "false"})
+    b = r.json()
+    assert b["original"] is False and b["contentType"] == "image/jpeg"
+    assert keys(s3, "derived/")[0].endswith("/w300_h4096_q80.jpg")

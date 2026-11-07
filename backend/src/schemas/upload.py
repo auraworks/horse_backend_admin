@@ -136,7 +136,8 @@ class CompleteUploadRequest(CamelModel):
 
 
 class ImageVariantUrl(CamelModel):
-    url: str = Field(description="Presigned URL of the resized/converted image", examples=["https://s3.../derived/horses/1/front_full/x.jpg/w1024_h4096_q80.webp?X-Amz-..."])
+    url: str = Field(description="Presigned URL of the original or of the resized/converted image", examples=["https://s3.../derived/horses/1/front_full/x.jpg/w1024_h4096_q80.webp?X-Amz-..."])
     expires_in: int = Field(description="Seconds until the URL expires", examples=[3600])
     content_type: str = Field(description="Content type of the variant", examples=["image/webp"])
     cached: bool = Field(description="True when the variant already existed (no transform ran)", examples=[True])
+    original: bool = Field(description="True when the URL is the unmodified original (no parameters given)", examples=[False])

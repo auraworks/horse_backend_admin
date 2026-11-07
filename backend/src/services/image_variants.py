@@ -75,10 +75,30 @@ async def _generate(event: dict) -> dict:
         return await asyncio.to_thread(_transform_local, event)
 
 
+ORIGINAL_TYPE = {"jpeg": "jpeg", "png": "png"}  # FileFormat value -> output type
+
+
 async def variant_url(
-    session: AsyncSession, photo_id: int, fmt: str, width: int | None, height: int | None, quality: int
+    session: AsyncSession,
+    photo_id: int,
+    fmt: str | None,
+    width: int | None,
+    height: int | None,
+    quality: int | None,
 ) -> dict:
+    """No transform parameter at all -> the original object, byte for byte.
+    Otherwise a cached variant; a missing `fmt` keeps the original's format."""
     photo = await get_or_404(session, Photo, photo_id, "Photo")
+    if fmt is None and width is None and height is None and quality is None:
+        return {
+            "url": storage.presign_view(photo.s3_key),
+            "expires_in": settings.PRESIGN_TTL,
+            "content_type": photo.content_type,
+            "cached": True,
+            "original": True,
+        }
+    fmt = fmt or ORIGINAL_TYPE[photo.file_format.value]
+    quality = quality or 80
     cap = settings.IMAGE_MAX_DIMENSION
     # Missing side = unbounded (up to the cap); the image keeps its aspect ratio and is never upscaled.
     w, h = width or cap, height or cap
@@ -105,4 +125,5 @@ async def variant_url(
         "expires_in": settings.PRESIGN_TTL,
         "content_type": FORMATS[fmt][1],
         "cached": cached,
+        "original": False,
     }
