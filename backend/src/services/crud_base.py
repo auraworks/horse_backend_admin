@@ -1,5 +1,6 @@
 """Generic list helpers: pagination, order=field.asc|desc, filters field=op.value."""
 import datetime as dt
+import operator
 from collections.abc import Mapping
 from typing import Any
 
@@ -60,14 +61,17 @@ def _condition(col: InstrumentedAttribute, op: str, raw: str, field: str):
             raise _bad(f"Filter '{field}': like/ilike only apply to text fields")
         return getattr(col, op)(raw)
     v = _coerce(col, raw, field)
+    if isinstance(v, bool) and op not in ("eq", "neq"):
+        raise _bad(f"Filter '{field}': boolean fields accept eq|neq|is only")
+    # Build only the requested comparison: SQLAlchemy rejects ordering operators with True/False.
     return {
-        "eq": col == v,
-        "neq": col != v,
-        "gt": col > v,
-        "gte": col >= v,
-        "lt": col < v,
-        "lte": col <= v,
-    }[op]
+        "eq": operator.eq,
+        "neq": operator.ne,
+        "gt": operator.gt,
+        "gte": operator.ge,
+        "lt": operator.lt,
+        "lte": operator.le,
+    }[op](col, v)
 
 
 def apply_filters(stmt: Select, params: Mapping[str, str], fields: dict[str, InstrumentedAttribute]) -> Select:

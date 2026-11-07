@@ -105,3 +105,14 @@ async def test_photo_metadata_list_get(client, api_headers, db_session):
 async def test_requires_api_key(client):
     for u in ("/api/v1/horses", "/api/v1/photos", "/api/v1/photo-metadata"):
         assert (await client.get(u)).status_code == 401
+
+
+async def test_boolean_filters(client, api_headers, db_session):
+    _, photos = await seed(db_session)
+    photos[0].is_selected = True
+    await db_session.commit()
+    for q, n in (("isSelected=eq.true", 1), ("isSelected=eq.false", 2), ("isSelected=neq.true", 2),
+                 ("isSelected=is.true", 1), ("isSelected=in.(true,false)", 3)):
+        r = await client.get(f"{URL}?{q}", headers=api_headers)
+        assert r.status_code == 200 and r.json()["count"] == n, (q, r.text)
+    assert (await client.get(f"{URL}?isSelected=gt.true", headers=api_headers)).status_code == 400
