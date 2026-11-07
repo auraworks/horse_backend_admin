@@ -23,6 +23,10 @@ import { useModal } from "@/components/hooks/useModal";
 import { useToast } from "@/components/ui/Toast/ToastProvider";
 import { PhotoViewer } from "@/components/horses/PhotoViewer";
 
+/** Path segment safe for ZIP / Windows Explorer (no separators or reserved characters). */
+const safeName = (s: string) =>
+  s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/[. ]+$/, "").slice(0, 120) || "_";
+
 type EditableKey = "horseNo" | "horseName" | "birthDate" | "sex" | "coatColor";
 type EditForm = Record<EditableKey, string>;
 
@@ -88,6 +92,7 @@ export default function HorseDetailPage({ params }: { params: Promise<{ id: stri
   const refreshedOnce = useRef(false);
   const [viewerPhotoId, setViewerPhotoId] = useState<number | null>(null);
   const [zipping, setZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState("");
 
   const reloadPhotos = useCallback(async () => {
     setPhotos(await api.listHorsePhotos(horseId));
@@ -190,14 +195,58 @@ export default function HorseDetailPage({ params }: { params: Promise<{ id: stri
     try {
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
-      for (const p of photos) {
-        const res = await fetch(photoFileUrl(p.id));
+      const root = zip.folder(horse.microchipNo)!;
+      const partOf = new Map(parts.map((pt) => [pt.code, pt]));
+      const folderOf = (p: PhotoDetail) => {
+        const pt = partOf.get(p.partCode);
+        return safeName(`${pt?.order ?? 0}_${p.partCode}_${pt?.label ?? p.partLabel}`);
+      };
+      const exported: Array<Record<string, unknown>> = [];
+      const sorted = [...photos].sort(
+        (a, b) =>
+          (partOf.get(a.partCode)?.order ?? 99) - (partOf.get(b.partCode)?.order ?? 99) ||
+          Number(b.isSelected) - Number(a.isSelected) ||
+          a.id - b.id
+      );
+
+      for (const [i, p] of sorted.entries()) {
+        setZipProgress(`${i + 1}/${sorted.length}`);
+        const res = await fetch(photoFileUrl(p.id)); // original bytes, unmodified
         if (!res.ok) throw new Error(`사진 ${p.id} 다운로드 실패 (${res.status})`);
-        zip.file(
-          `${horse.microchipNo}_${p.partCode}_${p.id}.${EXT[p.fileFormat] ?? "jpg"}`,
-          await res.arrayBuffer()
+        const base = safeName(
+          `${p.id}${p.isSelected ? "_대표" : ""}_${p.fileName.replace(/\.[^.]+$/, "")}`
         );
+        const ext = EXT[p.fileFormat] ?? "jpg";
+        const folder = folderOf(p);
+        const photoPath = `${folder}/${base}.${ext}`;
+        // viewUrl is a short-lived presigned link: not useful in an archive.
+        const { viewUrl: _viewUrl, ...detail } = p;
+        void _viewUrl;
+        const entry = { ...detail, zipPath: photoPath };
+        root.file(photoPath, await res.arrayBuffer(), { binary: true });
+        root.file(`${folder}/${base}.json`, JSON.stringify(entry, null, 2));
+        exported.push(entry);
       }
+
+      const summary = {
+        exportedAt: new Date().toISOString(),
+        horse,
+        photoCount: sorted.length,
+        parts: parts.map((pt) => {
+          const list = exported.filter((e) => e.partCode === pt.code);
+          return {
+            code: pt.code,
+            label: pt.label,
+            order: pt.order,
+            folder: list.length ? folderOf(list[0] as unknown as PhotoDetail) : null,
+            photoCount: list.length,
+            representativePhotoId:
+              (list.find((e) => e.isSelected)?.id as number | undefined) ?? null,
+          };
+        }),
+        photos: exported,
+      };
+      root.file("horse.json", JSON.stringify(summary, null, 2));
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -211,6 +260,7 @@ export default function HorseDetailPage({ params }: { params: Promise<{ id: stri
       toast.error(e instanceof Error ? e.message : "ZIP 생성에 실패했습니다.");
     } finally {
       setZipping(false);
+      setZipProgress("");
     }
   };
 
@@ -252,7 +302,7 @@ export default function HorseDetailPage({ params }: { params: Promise<{ id: stri
             className="h-10 gap-2"
           >
             <Download />
-            {zipping ? "ZIP 생성 중..." : "전체 사진 다운로드"}
+            {zipping ? `ZIP 생성 중... ${zipProgress}` : "전체 사진 다운로드"}
           </Button>
         </div>
       </div>
