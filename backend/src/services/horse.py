@@ -78,6 +78,6 @@ async def delete_horse(session: AsyncSession, horse_id: int) -> None:
     await session.commit()
     # DB is the source of truth: S3 cleanup runs after commit; failures are logged, not raised.
     try:
-        await storage.delete_objects(keys)
+        await storage.delete_photo_objects(keys)
     except Exception:
         logger.exception("Failed to delete S3 objects: %s", keys)

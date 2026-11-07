@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,6 +22,10 @@ class Settings(BaseSettings):
     # Legacy multipart upload through the API. API Gateway HTTP API rejects bodies over 10MB
     # (hard AWS limit), so this path cannot go higher; larger photos must use the presigned flow.
     MAX_DIRECT_UPLOAD_BYTES: int = 10485760  # 10MB
+    # On-the-fly image variants (GET /photos/{id}/image). "lambda" in production, "local" = Pillow in-process.
+    IMAGE_TRANSFORM_MODE: Literal["local", "lambda"] = "local"
+    IMAGE_TRANSFORM_FUNCTION: str = "horse-admin-img-transform"
+    IMAGE_MAX_DIMENSION: int = 4096  # largest width/height a variant may have
     CORS_ORIGINS: str = "http://localhost:3000"
     # DB dashboard (sqladmin) basic credentials
     ADMIN_DB_USER: str = "admin"

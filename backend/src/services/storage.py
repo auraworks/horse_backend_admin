@@ -118,3 +118,19 @@ async def delete_objects(keys: list[str]) -> None:
     keys = [k for k in keys if k]
     if keys:
         await asyncio.to_thread(_delete_objects_sync, keys)
+
+
+def _list_keys_sync(prefix: str) -> list[str]:
+    keys: list[str] = []
+    for page in _client().get_paginator("list_objects_v2").paginate(Bucket=settings.S3_BUCKET, Prefix=prefix):
+        keys.extend(o["Key"] for o in page.get("Contents", []))
+    return keys
+
+
+async def delete_photo_objects(keys: list[str]) -> None:
+    """Delete originals plus their cached on-the-fly variants (derived/<key>/...)."""
+    keys = [k for k in keys if k]
+    variants: list[str] = []
+    for k in keys:
+        variants.extend(await asyncio.to_thread(_list_keys_sync, f"derived/{k}/"))
+    await delete_objects(keys + variants)

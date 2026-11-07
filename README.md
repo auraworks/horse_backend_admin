@@ -57,6 +57,7 @@ docs/       보조 문서
 | EC2 보안그룹 | `sg-0f29a011687168fb4` |
 | RDS 보안그룹 | `sg-0f5448e0c9cbaa0c2` (5432: EC2 SG와 개발자 IP `14.52.96.42/32`만 허용) |
 | API Gateway | `rtt4o67y3m` (HTTP API) -> `https://rtt4o67y3m.execute-api.ap-northeast-2.amazonaws.com` |
+| Lambda | `horse-admin-img-transform` (python3.12, arm64, 2048MB, 25s) — 경량 이미지 변환, 역할 `horse-admin-img-role`. 배포 `bash infra/deploy-image-lambda.sh` |
 
 비밀 파일(`infra/secrets/`, git 제외): `rds.env`(DB 접속), `api-key.env`(API_ACCESS_KEY), `dashboard.env`(대시보드 계정), `horse-admin-key.pem`(SSH 키), `session-secret.txt`.
 **비밀 값은 이 문서에 적지 않습니다. 위 파일을 참조하세요.**
@@ -98,6 +99,9 @@ npm run dev                   # http://localhost:3000/admin
 | `MAX_UPLOAD_BYTES` | `104857600` | S3 직접 업로드(presigned) 최대 크기(100MB) |
 | `UPLOAD_URL_TTL` | `900` | presigned 업로드 폼 유효 시간(초) |
 | `MAX_DIRECT_UPLOAD_BYTES` | `10485760` | multipart 직접 업로드 최대 크기(10MB, API Gateway 한도라 올려도 효과 없음) |
+| `IMAGE_TRANSFORM_MODE` | `local` | 경량 이미지 변환 위치: `lambda`(운영) / `local`(개발·테스트) |
+| `IMAGE_TRANSFORM_FUNCTION` | `horse-admin-img-transform` | 변환 Lambda 이름 |
+| `IMAGE_MAX_DIMENSION` | `4096` | 변환본 최대 가로/세로 |
 | `CORS_ORIGINS` | `http://localhost:3000` | 쉼표 구분 허용 Origin |
 | `ADMIN_DB_USER` / `ADMIN_DB_PASSWORD` | `admin` / 개발용 기본값 | DB 대시보드 계정. 배포 시 랜덤 비밀번호로 덮어씀 |
 | `SESSION_SECRET` | API_ACCESS_KEY에서 파생 | 대시보드 세션 서명 |
@@ -196,6 +200,13 @@ curl -X POST "https://rtt4o67y3m.execute-api.ap-northeast-2.amazonaws.com/api/v1
 - 슬롯에 처음 올린 사진은 자동으로 대표 사진(`isSelected=true`)이 됩니다. 변경은 `PUT .../representative`.
 - `capturedAt`에 타임존이 없으면 UTC로 간주합니다.
 - `fileSha256`/`metaSha256`은 앱이 보낸 값을 그대로 저장하며 서버에서 재계산·검증하지 않습니다.
+
+**경량 이미지 (on-the-fly 변환)** — `GET /api/v1/photos/{photoId}/image?type=webp&width=1024`
+- `type`: `webp`(기본) | `avif` | `jpeg` | `png`, `width`/`height`: 최대 크기(16~4096px, 비율 유지·확대 안 함·EXIF 회전 반영, 생략한 변은 4096까지), `quality`: 1~100(기본 80, png 무시), `redirect`: `true`(기본, presigned URL로 `302`) / `false`(JSON `{url, expiresIn, contentType, cached}`).
+- **원본은 절대 수정하지 않습니다.** 변환본은 별도 사본으로 S3 `derived/<원본키>/w{W}_h{H}_q{Q}.{ext}`에 저장되고, 같은 조합의 두 번째 요청부터는 캐시를 씁니다. 사진/말 삭제 시 변환본도 함께 삭제됩니다.
+- 변환은 Lambda `horse-admin-img-transform`(Pillow, arm64, 2GB)이 수행합니다 (EC2 메모리 보호). 로컬 개발은 `IMAGE_TRANSFORM_MODE=local`로 프로세스 안에서 변환합니다.
+- 관리자 웹은 이 API를 쓰지 않고 원본(`viewUrl`)을 그대로 보여주며, 다운로드도 원본입니다.
+- 실측 (31MB, 9504×5344 원본): webp 1024px → 60KB, 첫 요청 1.8초 / 캐시 0.05초.
 
 ## 9. 촬영 부위 코드
 

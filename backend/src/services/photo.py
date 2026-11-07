@@ -62,6 +62,6 @@ async def delete_photo(session: AsyncSession, photo_id: int) -> None:
             nxt.is_selected = True
     await session.commit()
     try:
-        await storage.delete_objects([key])
+        await storage.delete_photo_objects([key])
     except Exception:
         logger.exception("Failed to delete S3 object: %s", key)

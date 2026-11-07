@@ -180,4 +180,6 @@ cat > "$DIR/outputs.json" <<EOT
   "apiUrl": "$API_URL"
 }
 EOT
+# On-the-fly image variants Lambda (GET /photos/{id}/image)
+bash "$DIR/deploy-image-lambda.sh"
 log "done: $API_URL"

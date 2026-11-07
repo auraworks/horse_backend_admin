@@ -133,3 +133,10 @@ class CompleteUploadRequest(CamelModel):
     metadata: MetadataInput = Field(description="Capture metadata (same schema as the multipart `metadata` field); fileSize must equal the uploaded size")
     recognized_microchip_number: str | None = Field(default=None, description="Required when slot=microchip: 15 digits", examples=["410123456789012"])
     evidence_source: ChipInputMethod | None = Field(default=None, description="Required when slot=microchip: ocr | manual")
+
+
+class ImageVariantUrl(CamelModel):
+    url: str = Field(description="Presigned URL of the resized/converted image", examples=["https://s3.../derived/horses/1/front_full/x.jpg/w1024_h4096_q80.webp?X-Amz-..."])
+    expires_in: int = Field(description="Seconds until the URL expires", examples=[3600])
+    content_type: str = Field(description="Content type of the variant", examples=["image/webp"])
+    cached: bool = Field(description="True when the variant already existed (no transform ran)", examples=[True])
